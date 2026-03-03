@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "date": "2026-03-03",
+    "phase": "pre-converge"
+  },
+  "cases": [
+    {
+      "name": "medium",
+      "traces": 120,
+      "samples": 4096,
+      "rows": [
+        {
+          "mode": "baseline",
+          "jobs": 1,
+          "elapsed_mean": 0.2047849499504082,
+          "elapsed_std": 0.005097749992273748,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 2,
+          "elapsed_mean": 0.11261589999776334,
+          "elapsed_std": 0.0008849999867379665,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 4,
+          "elapsed_mean": 0.05648555001243949,
+          "elapsed_std": 0.0013920500059612095,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 1,
+          "elapsed_mean": 0.7707875999913085,
+          "elapsed_std": 0.0043086000077892095,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 2,
+          "elapsed_mean": 0.38751410000259057,
+          "elapsed_std": 0.0036545000039041042,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 4,
+          "elapsed_mean": 0.19001555000431836,
+          "elapsed_std": 0.000172849977388978,
+          "success_mean": 120.0
+        }
+      ]
+    },
+    {
+      "name": "small",
+      "traces": 120,
+      "samples": 1024,
+      "rows": [
+        {
+          "mode": "baseline",
+          "jobs": 1,
+          "elapsed_mean": 0.019014399964362383,
+          "elapsed_std": 0.0004890999989584088,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 2,
+          "elapsed_mean": 0.025989899993874133,
+          "elapsed_std": 0.003112600010354072,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 4,
+          "elapsed_mean": 0.030885999993188307,
+          "elapsed_std": 0.0006926000060047954,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 1,
+          "elapsed_mean": 0.059453850029967725,
+          "elapsed_std": 0.003240549995098263,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 2,
+          "elapsed_mean": 0.03203850000863895,
+          "elapsed_std": 0.002138499985449016,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 4,
+          "elapsed_mean": 0.02987080000457354,
+          "elapsed_std": 0.001501899998402223,
+          "success_mean": 120.0
+        }
+      ]
+    }
+  ]
+}

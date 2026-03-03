@@ -31,7 +31,7 @@
   - Single fast decon implementation (incremental residual update).
 - `core.methods`
   - Unified method dispatcher: `decon/corr/stack`.
-  - Corr smoothing/post-filter control.
+  - Corr single-fast-engine execution with smoothing/post-filter control.
   - Stack peak-window control.
 - `waveform.synthetic`
   - Synthetic wavelet/response generation and convolution helpers.

@@ -105,3 +105,21 @@ def test_corr_stack_parallel_matches_serial() -> None:
         assert int(np.count_nonzero(ok1)) == obs.shape[0]
         diff = float(np.mean(np.abs(r0 - r1)))
         assert diff < 1e-8
+
+
+def test_corr_mode_flag_is_converged_to_single_engine() -> None:
+    src, _, obs = make_synthetic_batch(
+        traces=10,
+        samples=512,
+        dt=0.05,
+        noise_std=0.008,
+        rng_seed=21,
+    )
+    cfg = _cfg("corr")
+    r_base, ok_base, _ = run_batch_method(obs, src, cfg, mode="baseline", jobs=2)
+    r_opt, ok_opt, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=2)
+
+    assert int(np.count_nonzero(ok_base)) == obs.shape[0]
+    assert int(np.count_nonzero(ok_opt)) == obs.shape[0]
+    diff = float(np.mean(np.abs(r_base - r_opt)))
+    assert diff < 1e-12

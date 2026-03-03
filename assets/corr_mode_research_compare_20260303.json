@@ -1,0 +1,104 @@
+{
+  "date": "2026-03-03",
+  "metric": "elapsed_mean_sec",
+  "cases": [
+    {
+      "name": "medium",
+      "traces": 120,
+      "samples": 4096,
+      "pairs": [
+        {
+          "mode": "baseline",
+          "jobs": 1,
+          "pre": 0.2047849499504082,
+          "post": 0.21625064997351728,
+          "post_vs_pre_speedup": 0.9469795812196947
+        },
+        {
+          "mode": "baseline",
+          "jobs": 2,
+          "pre": 0.11261589999776334,
+          "post": 0.10746374996961094,
+          "post_vs_pre_speedup": 1.0479431438937254
+        },
+        {
+          "mode": "baseline",
+          "jobs": 4,
+          "pre": 0.05648555001243949,
+          "post": 0.06398400000762194,
+          "post_vs_pre_speedup": 0.8828074206944045
+        },
+        {
+          "mode": "optimized",
+          "jobs": 1,
+          "pre": 0.7707875999913085,
+          "post": 0.20018400001572445,
+          "post_vs_pre_speedup": 3.8503956356690003
+        },
+        {
+          "mode": "optimized",
+          "jobs": 2,
+          "pre": 0.38751410000259057,
+          "post": 0.11086310000973754,
+          "post_vs_pre_speedup": 3.495429046892552
+        },
+        {
+          "mode": "optimized",
+          "jobs": 4,
+          "pre": 0.19001555000431836,
+          "post": 0.06140995002351701,
+          "post_vs_pre_speedup": 3.0942143729404057
+        }
+      ]
+    },
+    {
+      "name": "small",
+      "traces": 120,
+      "samples": 1024,
+      "pairs": [
+        {
+          "mode": "baseline",
+          "jobs": 1,
+          "pre": 0.019014399964362383,
+          "post": 0.01773329998832196,
+          "post_vs_pre_speedup": 1.0722426156938683
+        },
+        {
+          "mode": "baseline",
+          "jobs": 2,
+          "pre": 0.025989899993874133,
+          "post": 0.03162855000118725,
+          "post_vs_pre_speedup": 0.8217227787204454
+        },
+        {
+          "mode": "baseline",
+          "jobs": 4,
+          "pre": 0.030885999993188307,
+          "post": 0.028576699987752363,
+          "post_vs_pre_speedup": 1.08081059067092
+        },
+        {
+          "mode": "optimized",
+          "jobs": 1,
+          "pre": 0.059453850029967725,
+          "post": 0.020114349987125024,
+          "post_vs_pre_speedup": 2.955792758305562
+        },
+        {
+          "mode": "optimized",
+          "jobs": 2,
+          "pre": 0.03203850000863895,
+          "post": 0.02284255000995472,
+          "post_vs_pre_speedup": 1.402579834330084
+        },
+        {
+          "mode": "optimized",
+          "jobs": 4,
+          "pre": 0.02987080000457354,
+          "post": 0.026038500014692545,
+          "post_vs_pre_speedup": 1.1471782163995072
+        }
+      ]
+    }
+  ]
+}

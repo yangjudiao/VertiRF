@@ -15,10 +15,11 @@
 
 1. Keep decon as a single fast implementation in `core/decon.py` (no multiple decon mode branches).
 2. Validate serial/parallel consistency whenever decon internals change.
-3. Keep zero-phase filters in `filters/zero_phase.py` only.
-4. Add tests for every behavior change.
-5. Document CLI changes in `README.md` and `tasks.md`.
-6. For corr/stack:
+3. Keep corr as a single fast implementation in `core/methods.py` (no baseline/optimized corr algorithm branches).
+4. Keep zero-phase filters in `filters/zero_phase.py` only.
+5. Add tests for every behavior change.
+6. Document CLI changes in `README.md` and `tasks.md`.
+7. For corr/stack:
    - keep smoothing bandwidth and post-filter options explicit;
    - keep stack peak window parameters explicit and test-covered.
 

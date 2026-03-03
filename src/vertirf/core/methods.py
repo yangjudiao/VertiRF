@@ -3,14 +3,12 @@ from __future__ import annotations
 import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Literal
 
 import numpy as np
 
 from vertirf.core.decon import DeconConfig, normalize_max_abs, run_batch_decon
 from vertirf.filters.zero_phase import FilterSpec, apply_zero_phase_filter
-from vertirf.native.backend import CorrNativeBackend, load_native_corr_backend
 
 MethodName = Literal["decon", "corr", "stack"]
 RunMode = Literal["baseline", "optimized"]
@@ -33,6 +31,7 @@ class MethodConfig:
     corr_post_low_hz: float = 0.1
     corr_post_high_hz: float = 0.8
     corr_post_corners: int = 4
+    corr_fft_switch_samples: int = 8192
 
     # Stack-specific options.
     stack_peak_window_start_sec: float = -2.0
@@ -51,12 +50,6 @@ class MethodPreparedState:
     corr_fft_kernel: np.ndarray
     nfft_conv: int
     corr_smoothing_response: np.ndarray
-
-
-@lru_cache(maxsize=1)
-def _native_corr_backend() -> CorrNativeBackend | None:
-    backend, _ = load_native_corr_backend()
-    return backend
 
 
 def _to_decon_config(cfg: MethodConfig) -> DeconConfig:
@@ -87,12 +80,6 @@ def _corr_smoothing_response(n: int, dt: float, bandwidth_hz: float) -> np.ndarr
         return np.ones((n // 2 + 1,), dtype=np.float64)
     f = np.fft.rfftfreq(n, d=float(dt))
     return np.exp(-0.5 * (f / max(1e-9, bw)) ** 2)
-
-
-def _apply_corr_smoothing(x: np.ndarray, dt: float, bandwidth_hz: float) -> np.ndarray:
-    n = int(x.size)
-    resp = _corr_smoothing_response(n, dt, bandwidth_hz)
-    return np.fft.irfft(np.fft.rfft(x, n) * resp, n)
 
 
 def _corr_post_filter_spec(cfg: MethodConfig) -> FilterSpec | None:
@@ -132,31 +119,16 @@ def prepare_method_state(source: np.ndarray, cfg: MethodConfig) -> MethodPrepare
     )
 
 
-def _run_corr_single_baseline(obs: np.ndarray, cfg: MethodConfig, source_filtered: np.ndarray) -> np.ndarray:
-    x = apply_zero_phase_filter(np.asarray(obs, dtype=np.float64), cfg.dt, cfg.filter_spec)
-    cc = np.correlate(x, source_filtered, mode="same")
-    cc = cc / (float(np.sum(source_filtered * source_filtered)) + 1e-12)
-    cc = _apply_corr_smoothing(cc, cfg.dt, cfg.corr_smoothing_bandwidth_hz)
-
-    post = _corr_post_filter_spec(cfg)
-    if post is not None:
-        cc = apply_zero_phase_filter(cc, cfg.dt, post)
-
-    cc, _ = normalize_max_abs(cc)
-    return cc
-
-
-def _run_corr_single_optimized(
+def _run_corr_single_fast(
     obs: np.ndarray,
     cfg: MethodConfig,
     prepared: MethodPreparedState,
 ) -> np.ndarray:
     x = apply_zero_phase_filter(np.asarray(obs, dtype=np.float64), cfg.dt, cfg.filter_spec)
-    native_backend = _native_corr_backend()
-    if native_backend is not None:
-        cc = native_backend.corr_same(x, prepared.source_filtered)
-    else:
+    if int(prepared.n_samples) >= int(cfg.corr_fft_switch_samples):
         cc = _correlate_same_fft(x, prepared.corr_fft_kernel, prepared.nfft_conv)
+    else:
+        cc = np.correlate(x, prepared.source_filtered, mode="same")
     cc = cc / prepared.source_energy
 
     if float(cfg.corr_smoothing_bandwidth_hz) > 0.0:
@@ -225,10 +197,7 @@ def run_batch_method(
         prepared = prepare_method_state(src, cfg)
 
         def _job(i: int) -> tuple[int, np.ndarray]:
-            if mode == "baseline":
-                y = _run_corr_single_baseline(arr[i], cfg, prepared.source_filtered)
-            else:
-                y = _run_corr_single_optimized(arr[i], cfg, prepared)
+            y = _run_corr_single_fast(arr[i], cfg, prepared)
             return i, y
 
     elif method == "stack":

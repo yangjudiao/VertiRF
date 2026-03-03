@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "date": "2026-03-03",
+    "phase": "post-converge"
+  },
+  "cases": [
+    {
+      "name": "medium",
+      "traces": 120,
+      "samples": 4096,
+      "rows": [
+        {
+          "mode": "baseline",
+          "jobs": 1,
+          "elapsed_mean": 0.21625064997351728,
+          "elapsed_std": 0.0007178500236477703,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 2,
+          "elapsed_mean": 0.10746374996961094,
+          "elapsed_std": 0.0005519499827641994,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 4,
+          "elapsed_mean": 0.06398400000762194,
+          "elapsed_std": 0.0006241999799385667,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 1,
+          "elapsed_mean": 0.20018400001572445,
+          "elapsed_std": 0.007803699991200119,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 2,
+          "elapsed_mean": 0.11086310000973754,
+          "elapsed_std": 0.0028338000120129436,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 4,
+          "elapsed_mean": 0.06140995002351701,
+          "elapsed_std": 0.0014678500010631979,
+          "success_mean": 120.0
+        }
+      ]
+    },
+    {
+      "name": "small",
+      "traces": 120,
+      "samples": 1024,
+      "rows": [
+        {
+          "mode": "baseline",
+          "jobs": 1,
+          "elapsed_mean": 0.01773329998832196,
+          "elapsed_std": 0.00010689999908208847,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 2,
+          "elapsed_mean": 0.03162855000118725,
+          "elapsed_std": 0.00843115002498962,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "baseline",
+          "jobs": 4,
+          "elapsed_mean": 0.028576699987752363,
+          "elapsed_std": 0.0015391999913845211,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 1,
+          "elapsed_mean": 0.020114349987125024,
+          "elapsed_std": 0.0026321499899495393,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 2,
+          "elapsed_mean": 0.02284255000995472,
+          "elapsed_std": 0.002749549981672317,
+          "success_mean": 120.0
+        },
+        {
+          "mode": "optimized",
+          "jobs": 4,
+          "elapsed_mean": 0.026038500014692545,
+          "elapsed_std": 0.0014631000231020153,
+          "success_mean": 120.0
+        }
+      ]
+    }
+  ]
+}

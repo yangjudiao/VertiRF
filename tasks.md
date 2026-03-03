@@ -31,6 +31,7 @@
 
 - [x] Add unified method dispatcher for `decon/corr/stack`.
 - [x] Add corr smoothing bandwidth parameter and corr post-filter selection.
+- [x] Converge corr to single fast engine (remove baseline/optimized algorithm split).
 - [x] Add stack peak-window parameterization.
 - [x] Add serial/parallel execution support for corr and stack.
 - Acceptance criteria:

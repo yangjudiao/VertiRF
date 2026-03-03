@@ -53,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--corr-post-low-hz", type=float, default=0.1)
     common.add_argument("--corr-post-high-hz", type=float, default=0.8)
     common.add_argument("--corr-post-corners", type=int, default=4)
+    common.add_argument("--corr-fft-switch-samples", type=int, default=8192)
 
     # Stack-specific
     common.add_argument("--stack-peak-window-start-sec", type=float, default=-2.0)
@@ -105,6 +106,7 @@ def _build_method_cfg(args: argparse.Namespace) -> MethodConfig:
         corr_post_low_hz=float(args.corr_post_low_hz),
         corr_post_high_hz=float(args.corr_post_high_hz),
         corr_post_corners=int(args.corr_post_corners),
+        corr_fft_switch_samples=int(args.corr_fft_switch_samples),
         stack_peak_window_start_sec=float(args.stack_peak_window_start_sec),
         stack_peak_window_end_sec=float(args.stack_peak_window_end_sec),
     )
@@ -148,7 +150,7 @@ def _run_once(args: argparse.Namespace, mode: str, jobs: int) -> dict:
         rng_seed=int(args.seed),
     )
     cfg = _build_method_cfg(args)
-    effective_mode = "optimized" if str(args.method) == "decon" else str(mode)
+    effective_mode = "optimized" if str(args.method) in {"decon", "corr"} else str(mode)
 
     t0 = time.perf_counter()
     rec, ok, steps = run_batch_method(obs, src, cfg, mode=effective_mode, jobs=int(jobs))
@@ -183,7 +185,7 @@ def cmd_run_synthetic(args: argparse.Namespace) -> int:
 def cmd_benchmark(args: argparse.Namespace) -> int:
     repeats = max(1, int(args.repeat))
 
-    if str(args.method) == "decon":
+    if str(args.method) in {"decon", "corr"}:
         serial_runs = []
         parallel_runs = []
         for _ in range(repeats):
@@ -196,7 +198,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
 
         summary = {
             "method": str(args.method),
-            "decon_engine": "single_fast_version",
+            "engine": "single_fast_version",
             "serial": {
                 "elapsed_sec_mean": serial_elapsed,
                 "runs": serial_runs,

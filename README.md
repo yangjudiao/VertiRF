@@ -12,7 +12,7 @@ VertiRF 是一个独立开源工具包，面向垂向接收函数（VRF）流程
 
 - Three methods in one interface:
   - `decon`: time-iteration deconvolution (single fast engine)
-  - `corr`: cross-correlation retrieval with configurable smoothing and post-filter
+  - `corr`: cross-correlation retrieval (single fast engine) with configurable smoothing and post-filter
   - `stack`: peak-window aligned stacking with configurable peak window
 - Zero-phase filter options:
   - `gaussian`
@@ -60,9 +60,9 @@ python -m pip install -e .[dev]
 # decon (single fast engine, mode flag not needed)
 python -m vertirf.cli run-synthetic --method decon --jobs 2
 
-# corr (smoothing + post-filter selectable)
+# corr (single fast engine; mode flag optional)
 python -m vertirf.cli run-synthetic \
-  --method corr --mode optimized --jobs 4 \
+  --method corr --jobs 4 \
   --corr-smoothing-bandwidth-hz 0.25 \
   --corr-post-filter-type gaussian
 

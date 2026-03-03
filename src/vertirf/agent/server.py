@@ -36,6 +36,7 @@ def _build_cfg(params: dict[str, Any]) -> tuple[MethodConfig, str, int, int, int
         corr_post_low_hz=float(params.get("corr_post_low_hz", 0.1)),
         corr_post_high_hz=float(params.get("corr_post_high_hz", 0.8)),
         corr_post_corners=int(params.get("corr_post_corners", 4)),
+        corr_fft_switch_samples=int(params.get("corr_fft_switch_samples", 8192)),
         stack_peak_window_start_sec=float(params.get("stack_peak_window_start_sec", -2.0)),
         stack_peak_window_end_sec=float(params.get("stack_peak_window_end_sec", 20.0)),
     )
@@ -49,7 +50,7 @@ def _build_cfg(params: dict[str, Any]) -> tuple[MethodConfig, str, int, int, int
 
 def _run_synthetic(params: dict[str, Any]) -> dict[str, Any]:
     cfg, mode, traces, samples, jobs, noise_std = _build_cfg(params)
-    effective_mode = "optimized" if str(cfg.method) == "decon" else str(mode)
+    effective_mode = "optimized" if str(cfg.method) in {"decon", "corr"} else str(mode)
     src, truth, obs = make_synthetic_batch(
         traces=traces,
         samples=samples,
