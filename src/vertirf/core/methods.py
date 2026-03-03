@@ -212,7 +212,7 @@ def run_batch_method(
 
     method = str(cfg.method).lower().strip()
     if method == "decon":
-        return run_batch_decon(arr, src, _to_decon_config(cfg), mode=mode, jobs=jobs)
+        return run_batch_decon(arr, src, _to_decon_config(cfg), jobs=jobs)
 
     n_traces, n_samples = arr.shape
     out = np.zeros((n_traces, n_samples), dtype=np.float64)

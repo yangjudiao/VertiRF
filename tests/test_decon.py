@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from vertirf.core.decon import DeconConfig, deconit_baseline, run_batch_decon
+from vertirf.core.decon import DeconConfig, run_batch_decon
 from vertirf.filters.zero_phase import FilterSpec, apply_zero_phase_filter
 from vertirf.waveform.synthetic import convolve_same, corrcoef, make_synthetic_batch, ricker_wavelet
 
@@ -31,7 +31,7 @@ def test_closed_loop_recovery_across_filters() -> None:
 
     for ft in ["gaussian", "butterworth_bandpass", "raised_cosine_bandpass", "tukey_bandpass"]:
         cfg = _cfg(ft, allow_negative=True)
-        rec, ok, _ = run_batch_decon(obs, src, cfg, mode="optimized", jobs=2)
+        rec, ok, _ = run_batch_decon(obs, src, cfg, jobs=2)
         assert int(np.count_nonzero(ok)) >= 5
 
         src_f = apply_zero_phase_filter(src, cfg.dt, cfg.filter_spec)
@@ -62,22 +62,22 @@ def test_allow_negative_impulse_switch_changes_precenter_recovery() -> None:
     cfg_pos = _cfg("gaussian", allow_negative=False)
     cfg_full = _cfg("gaussian", allow_negative=True)
 
-    rf_pos = deconit_baseline(obs, src, cfg_pos).rf
-    rf_full = deconit_baseline(obs, src, cfg_full).rf
+    rf_pos, _, _ = run_batch_decon(obs[None, :], src, cfg_pos, jobs=1)
+    rf_full, _, _ = run_batch_decon(obs[None, :], src, cfg_full, jobs=1)
 
-    pre_pos = float(np.max(np.abs(rf_pos[:center])))
-    pre_full = float(np.max(np.abs(rf_full[:center])))
+    pre_pos = float(np.max(np.abs(rf_pos[0, :center])))
+    pre_full = float(np.max(np.abs(rf_full[0, :center])))
     assert pre_full > pre_pos * 1.2
 
 
-def test_baseline_and_optimized_are_numerically_close() -> None:
+def test_serial_and_parallel_are_numerically_close() -> None:
     src, _, obs = make_synthetic_batch(traces=10, samples=512, dt=0.05, noise_std=0.01, rng_seed=9)
     cfg = _cfg("butterworth_bandpass", allow_negative=True)
 
-    r0, ok0, _ = run_batch_decon(obs, src, cfg, mode="baseline", jobs=1)
-    r1, ok1, _ = run_batch_decon(obs, src, cfg, mode="optimized", jobs=3)
+    r0, ok0, _ = run_batch_decon(obs, src, cfg, jobs=1)
+    r1, ok1, _ = run_batch_decon(obs, src, cfg, jobs=3)
 
     assert int(np.count_nonzero(ok0)) >= 8
     assert int(np.count_nonzero(ok1)) >= 8
     diff = float(np.mean(np.abs(r0 - r1)))
-    assert diff < 1e-6
+    assert diff < 1e-12

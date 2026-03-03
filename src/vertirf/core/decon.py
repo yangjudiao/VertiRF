@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Literal
 
 import numpy as np
 
@@ -35,7 +34,6 @@ class _PreparedState:
     src_filt: np.ndarray
     denom: float
     corr_fft_kernel: np.ndarray
-    conv_src_fft: np.ndarray
     nfft_conv: int
 
 
@@ -58,26 +56,25 @@ def _phase_shift_roll(x: np.ndarray, dt: float, tshift_sec: float) -> np.ndarray
     return np.roll(np.asarray(x, dtype=np.float64), shift)
 
 
-def _convolve_same_direct(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.convolve(a, b, mode="same")
-
-
-def _convolve_same_fft(a: np.ndarray, b: np.ndarray, nfft_conv: int, b_fft: np.ndarray) -> np.ndarray:
-    n = int(a.size)
-    full = np.fft.irfft(np.fft.rfft(a, nfft_conv) * b_fft, nfft_conv).real[: (2 * n - 1)]
-    start = (n - 1) // 2
-    return full[start : start + n]
-
-
-def _correlate_same_direct(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.correlate(a, b, mode="same")
-
-
 def _correlate_same_fft(a: np.ndarray, corr_fft_kernel: np.ndarray, nfft_conv: int) -> np.ndarray:
     n = int(a.size)
     full = np.fft.irfft(np.fft.rfft(a, nfft_conv) * corr_fft_kernel, nfft_conv).real[: (2 * n - 1)]
     start = (n - 1) // 2
     return full[start : start + n]
+
+
+def _accumulate_shifted_same_inplace(dst: np.ndarray, src: np.ndarray, shift: int, scale: float) -> None:
+    n = int(dst.size)
+    s = int(shift)
+    if s >= 0:
+        n_tail = n - s
+        if n_tail > 0:
+            dst[s:] += float(scale) * src[:n_tail]
+        return
+
+    n_head = n + s
+    if n_head > 0:
+        dst[:n_head] += float(scale) * src[-s:]
 
 
 def _pick_window_index(corr_same: np.ndarray, allow_negative_impulse: bool) -> int:
@@ -99,7 +96,6 @@ def _prepare_state(source: np.ndarray, cfg: DeconConfig) -> _PreparedState:
 
     corr_kernel = np.flip(src_filt)
     corr_fft_kernel = np.fft.rfft(corr_kernel, nfft_conv)
-    conv_src_fft = np.fft.rfft(src_filt, nfft_conv)
 
     return _PreparedState(
         nt=nt,
@@ -107,12 +103,11 @@ def _prepare_state(source: np.ndarray, cfg: DeconConfig) -> _PreparedState:
         src_filt=src_filt,
         denom=denom,
         corr_fft_kernel=corr_fft_kernel,
-        conv_src_fft=conv_src_fft,
         nfft_conv=nfft_conv,
     )
 
 
-def _decon_core_baseline(observed: np.ndarray, prepared: _PreparedState, cfg: DeconConfig) -> DeconResult:
+def _decon_core_fast(observed: np.ndarray, prepared: _PreparedState, cfg: DeconConfig) -> DeconResult:
     u = np.asarray(observed, dtype=np.float64)
     if u.size != prepared.nt:
         raise ValueError("observed length must match source length")
@@ -123,45 +118,7 @@ def _decon_core_baseline(observed: np.ndarray, prepared: _PreparedState, cfg: De
     power_obs = float(np.sum(obs * obs)) + 1e-12
     rms = np.zeros(max(1, int(cfg.itmax)), dtype=np.float64)
 
-    prev_sumsq = 1.0
-    d_error = 100.0 * power_obs + float(cfg.minderr)
-    it = 0
-
-    while abs(d_error) > float(cfg.minderr) and it < int(cfg.itmax):
-        corr_same = _correlate_same_direct(residual, prepared.src_filt)
-        idx = _pick_window_index(corr_same, allow_negative_impulse=bool(cfg.allow_negative_impulse))
-
-        amp = corr_same[idx] / prepared.denom
-        impulse[idx] += amp
-
-        pred = _convolve_same_direct(impulse, prepared.src_filt)
-        residual = obs - pred
-
-        sumsq = float(np.sum(residual * residual) / power_obs)
-        if not math.isfinite(sumsq):
-            break
-
-        rms[it] = sumsq
-        d_error = 100.0 * (prev_sumsq - sumsq)
-        prev_sumsq = sumsq
-        it += 1
-
-    rf = _phase_shift_roll(impulse, dt=cfg.dt, tshift_sec=cfg.tshift_sec)
-    rf, amp = normalize_max_abs(rf)
-    return DeconResult(rf=rf, rms_history=rms[: max(0, it)], iterations=it, success=bool(amp > 0.0 and math.isfinite(amp)))
-
-
-def _decon_core_optimized(observed: np.ndarray, prepared: _PreparedState, cfg: DeconConfig) -> DeconResult:
-    u = np.asarray(observed, dtype=np.float64)
-    if u.size != prepared.nt:
-        raise ValueError("observed length must match source length")
-
-    obs = apply_zero_phase_filter(u, cfg.dt, cfg.filter_spec)
-    residual = obs.copy()
-    impulse = np.zeros(prepared.nt, dtype=np.float64)
-    power_obs = float(np.sum(obs * obs)) + 1e-12
-    rms = np.zeros(max(1, int(cfg.itmax)), dtype=np.float64)
-
+    center = (prepared.nt - 1) // 2
     prev_sumsq = 1.0
     d_error = 100.0 * power_obs + float(cfg.minderr)
     it = 0
@@ -173,8 +130,8 @@ def _decon_core_optimized(observed: np.ndarray, prepared: _PreparedState, cfg: D
         amp = corr_same[idx] / prepared.denom
         impulse[idx] += amp
 
-        pred = _convolve_same_fft(impulse, prepared.src_filt, prepared.nfft_conv, prepared.conv_src_fft)
-        residual = obs - pred
+        shift = int(idx) - int(center)
+        _accumulate_shifted_same_inplace(residual, prepared.src_filt, shift=shift, scale=-float(amp))
 
         sumsq = float(np.sum(residual * residual) / power_obs)
         if not math.isfinite(sumsq):
@@ -190,20 +147,10 @@ def _decon_core_optimized(observed: np.ndarray, prepared: _PreparedState, cfg: D
     return DeconResult(rf=rf, rms_history=rms[: max(0, it)], iterations=it, success=bool(amp > 0.0 and math.isfinite(amp)))
 
 
-def deconit_baseline(observed: np.ndarray, source: np.ndarray, cfg: DeconConfig) -> DeconResult:
-    prepared = _prepare_state(source, cfg)
-    return _decon_core_baseline(observed, prepared, cfg)
-
-
-def deconit_optimized(observed: np.ndarray, prepared: _PreparedState, cfg: DeconConfig) -> DeconResult:
-    return _decon_core_optimized(observed, prepared, cfg)
-
-
 def run_batch_decon(
     observed: np.ndarray,
     source: np.ndarray,
     cfg: DeconConfig,
-    mode: Literal["baseline", "optimized"] = "optimized",
     jobs: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     arr = np.asarray(observed, dtype=np.float64)
@@ -219,18 +166,10 @@ def run_batch_decon(
     ok = np.zeros((n_traces,), dtype=bool)
     iters = np.zeros((n_traces,), dtype=np.int32)
 
-    if mode == "baseline":
-        for i in range(n_traces):
-            res = deconit_baseline(arr[i], src, cfg)
-            out[i] = res.rf
-            ok[i] = res.success
-            iters[i] = int(res.iterations)
-        return out, ok, iters
-
     prepared = _prepare_state(src, cfg)
 
     def _job(i: int) -> tuple[int, DeconResult]:
-        return i, deconit_optimized(arr[i], prepared, cfg)
+        return i, _decon_core_fast(arr[i], prepared, cfg)
 
     n_jobs = max(1, int(jobs))
     if n_jobs == 1:

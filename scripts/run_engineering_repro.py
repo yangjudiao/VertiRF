@@ -34,9 +34,9 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def run_once(observed: np.ndarray, source: np.ndarray, cfg: DeconConfig, mode: str, jobs: int) -> dict:
+def run_once(observed: np.ndarray, source: np.ndarray, cfg: DeconConfig, jobs: int) -> dict:
     t0 = time.perf_counter()
-    recovered, ok, iters = run_batch_decon(observed, source, cfg, mode=mode, jobs=jobs)
+    recovered, ok, iters = run_batch_decon(observed, source, cfg, jobs=jobs)
     elapsed = time.perf_counter() - t0
     return {
         "elapsed_sec": float(elapsed),
@@ -80,24 +80,24 @@ def main() -> int:
     )
 
     n_repeat = max(1, int(args.repeat))
-    baseline_runs: list[dict] = []
-    optimized_runs: list[dict] = []
+    serial_runs: list[dict] = []
+    parallel_runs: list[dict] = []
 
     for _ in range(n_repeat):
-        baseline_runs.append(run_once(observed, source, cfg, mode="baseline", jobs=1))
-        optimized_runs.append(run_once(observed, source, cfg, mode="optimized", jobs=max(1, int(args.jobs))))
+        serial_runs.append(run_once(observed, source, cfg, jobs=1))
+        parallel_runs.append(run_once(observed, source, cfg, jobs=max(1, int(args.jobs))))
 
-    baseline_elapsed = float(np.mean([x["elapsed_sec"] for x in baseline_runs]))
-    optimized_elapsed = float(np.mean([x["elapsed_sec"] for x in optimized_runs]))
-    speedup = baseline_elapsed / max(1e-12, optimized_elapsed)
+    serial_elapsed = float(np.mean([x["elapsed_sec"] for x in serial_runs]))
+    parallel_elapsed = float(np.mean([x["elapsed_sec"] for x in parallel_runs]))
+    speedup = serial_elapsed / max(1e-12, parallel_elapsed)
 
-    b0 = baseline_runs[0]["recovered"]
-    o0 = optimized_runs[0]["recovered"]
-    consistency_mae = float(np.mean(np.abs(b0 - o0)))
+    s0 = serial_runs[0]["recovered"]
+    p0 = parallel_runs[0]["recovered"]
+    consistency_mae = float(np.mean(np.abs(s0 - p0)))
 
-    for x in baseline_runs:
+    for x in serial_runs:
         x.pop("recovered", None)
-    for x in optimized_runs:
+    for x in parallel_runs:
         x.pop("recovered", None)
 
     report = {
@@ -116,16 +116,18 @@ def main() -> int:
             "itmax": int(args.itmax),
             "minderr": float(args.minderr),
         },
-        "baseline": {
-            "elapsed_sec_mean": baseline_elapsed,
-            "runs": baseline_runs,
+        "decon_engine": "single_fast_version",
+        "serial": {
+            "elapsed_sec_mean": serial_elapsed,
+            "runs": serial_runs,
         },
-        "optimized": {
-            "elapsed_sec_mean": optimized_elapsed,
-            "runs": optimized_runs,
+        "parallel": {
+            "elapsed_sec_mean": parallel_elapsed,
+            "runs": parallel_runs,
+            "jobs": int(max(1, int(args.jobs))),
         },
-        "optimized_vs_baseline_speedup": float(speedup),
-        "baseline_optimized_consistency_mae": consistency_mae,
+        "parallel_speedup_vs_serial": float(speedup),
+        "serial_parallel_consistency_mae": consistency_mae,
     }
 
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

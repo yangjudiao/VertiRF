@@ -148,15 +148,17 @@ def _run_once(args: argparse.Namespace, mode: str, jobs: int) -> dict:
         rng_seed=int(args.seed),
     )
     cfg = _build_method_cfg(args)
+    effective_mode = "optimized" if str(args.method) == "decon" else str(mode)
 
     t0 = time.perf_counter()
-    rec, ok, steps = run_batch_method(obs, src, cfg, mode=mode, jobs=int(jobs))
+    rec, ok, steps = run_batch_method(obs, src, cfg, mode=effective_mode, jobs=int(jobs))
     elapsed = time.perf_counter() - t0
 
     metrics = _evaluate(rec, resp_true)
     out = {
         "method": str(args.method),
-        "mode": mode,
+        "mode": effective_mode,
+        "requested_mode": str(mode),
         "jobs": int(jobs),
         "elapsed_sec": float(elapsed),
         "traces": int(obs.shape[0]),
@@ -181,38 +183,74 @@ def cmd_run_synthetic(args: argparse.Namespace) -> int:
 def cmd_benchmark(args: argparse.Namespace) -> int:
     repeats = max(1, int(args.repeat))
 
-    baseline_runs = []
-    optimized_runs = []
-    for _ in range(repeats):
-        baseline_runs.append(_run_once(args, mode="baseline", jobs=1))
-        optimized_runs.append(_run_once(args, mode="optimized", jobs=max(1, int(args.jobs))))
+    if str(args.method) == "decon":
+        serial_runs = []
+        parallel_runs = []
+        for _ in range(repeats):
+            serial_runs.append(_run_once(args, mode="optimized", jobs=1))
+            parallel_runs.append(_run_once(args, mode="optimized", jobs=max(1, int(args.jobs))))
 
-    baseline_elapsed = float(np.mean([x["elapsed_sec"] for x in baseline_runs]))
-    optimized_elapsed = float(np.mean([x["elapsed_sec"] for x in optimized_runs]))
-    speedup = baseline_elapsed / max(1e-12, optimized_elapsed)
+        serial_elapsed = float(np.mean([x["elapsed_sec"] for x in serial_runs]))
+        parallel_elapsed = float(np.mean([x["elapsed_sec"] for x in parallel_runs]))
+        speedup = serial_elapsed / max(1e-12, parallel_elapsed)
 
-    summary = {
-        "method": str(args.method),
-        "baseline": {
-            "elapsed_sec_mean": baseline_elapsed,
-            "runs": baseline_runs,
-        },
-        "optimized": {
-            "elapsed_sec_mean": optimized_elapsed,
-            "runs": optimized_runs,
-        },
-        "parallel_speedup_vs_serial": float(speedup),
-        "benchmark_config": {
-            "traces": int(args.traces),
-            "samples": int(args.samples),
-            "repeat": int(repeats),
-            "jobs_parallel": int(max(1, int(args.jobs))),
-            "filter_type": str(args.filter_type),
-            "allow_negative_impulse": bool(args.allow_negative_impulse),
-            "itmax": int(args.itmax),
-            "minderr": float(args.minderr),
-        },
-    }
+        summary = {
+            "method": str(args.method),
+            "decon_engine": "single_fast_version",
+            "serial": {
+                "elapsed_sec_mean": serial_elapsed,
+                "runs": serial_runs,
+            },
+            "parallel": {
+                "elapsed_sec_mean": parallel_elapsed,
+                "runs": parallel_runs,
+                "jobs": int(max(1, int(args.jobs))),
+            },
+            "parallel_speedup_vs_serial": float(speedup),
+            "benchmark_config": {
+                "traces": int(args.traces),
+                "samples": int(args.samples),
+                "repeat": int(repeats),
+                "jobs_parallel": int(max(1, int(args.jobs))),
+                "filter_type": str(args.filter_type),
+                "allow_negative_impulse": bool(args.allow_negative_impulse),
+                "itmax": int(args.itmax),
+                "minderr": float(args.minderr),
+            },
+        }
+    else:
+        baseline_runs = []
+        optimized_runs = []
+        for _ in range(repeats):
+            baseline_runs.append(_run_once(args, mode="baseline", jobs=1))
+            optimized_runs.append(_run_once(args, mode="optimized", jobs=max(1, int(args.jobs))))
+
+        baseline_elapsed = float(np.mean([x["elapsed_sec"] for x in baseline_runs]))
+        optimized_elapsed = float(np.mean([x["elapsed_sec"] for x in optimized_runs]))
+        speedup = baseline_elapsed / max(1e-12, optimized_elapsed)
+
+        summary = {
+            "method": str(args.method),
+            "baseline": {
+                "elapsed_sec_mean": baseline_elapsed,
+                "runs": baseline_runs,
+            },
+            "optimized": {
+                "elapsed_sec_mean": optimized_elapsed,
+                "runs": optimized_runs,
+            },
+            "parallel_speedup_vs_serial": float(speedup),
+            "benchmark_config": {
+                "traces": int(args.traces),
+                "samples": int(args.samples),
+                "repeat": int(repeats),
+                "jobs_parallel": int(max(1, int(args.jobs))),
+                "filter_type": str(args.filter_type),
+                "allow_negative_impulse": bool(args.allow_negative_impulse),
+                "itmax": int(args.itmax),
+                "minderr": float(args.minderr),
+            },
+        }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(summary, indent=2), encoding="utf-8")

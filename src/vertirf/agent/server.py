@@ -49,6 +49,7 @@ def _build_cfg(params: dict[str, Any]) -> tuple[MethodConfig, str, int, int, int
 
 def _run_synthetic(params: dict[str, Any]) -> dict[str, Any]:
     cfg, mode, traces, samples, jobs, noise_std = _build_cfg(params)
+    effective_mode = "optimized" if str(cfg.method) == "decon" else str(mode)
     src, truth, obs = make_synthetic_batch(
         traces=traces,
         samples=samples,
@@ -57,10 +58,11 @@ def _run_synthetic(params: dict[str, Any]) -> dict[str, Any]:
         noise_std=noise_std,
         rng_seed=int(params.get("seed", 0)),
     )
-    rec, ok, steps = run_batch_method(obs, src, cfg, mode=mode, jobs=jobs)
+    rec, ok, steps = run_batch_method(obs, src, cfg, mode=effective_mode, jobs=jobs)
     return {
         "method": cfg.method,
-        "mode": mode,
+        "mode": effective_mode,
+        "requested_mode": mode,
         "traces": traces,
         "samples": samples,
         "jobs": jobs,

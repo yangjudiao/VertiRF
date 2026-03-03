@@ -28,7 +28,7 @@
 - `filters.zero_phase`
   - Build frequency-domain amplitude responses for all supported filters.
 - `core.decon`
-  - Decon baseline and optimized implementations.
+  - Single fast decon implementation (incremental residual update).
 - `core.methods`
   - Unified method dispatcher: `decon/corr/stack`.
   - Corr smoothing/post-filter control.
@@ -57,10 +57,10 @@
 
 ## 6. Performance Strategy
 
-- Reuse FFT/filter preparation in optimized paths.
-- Keep baseline path untouched for regression comparison.
+- Reuse FFT/filter preparation in method paths.
+- Keep decon as a single fast path and validate serial/parallel numerical consistency.
 - Use thread-level parallelism for independent traces.
-- Emit per-method parallel speedup report against serial baseline.
+- Emit per-method speed/consistency report against serial execution.
 
 ## 7. Native Backend Strategy (C/C++)
 

@@ -7,13 +7,17 @@ __pycache__/
 .venv/
 venv/
 benchmark_summary.json
+benchmark_summary_large.json
 benchmark_smoke_ci.json
 method_parallel_benchmark_summary.json
 method_parallel_benchmark_summary_large.json
+benchmark_summary_ultra*.json
+benchmark_decon_single_*.json
 output_run_synthetic.json
 output_*_run.json
 test_report.txt
 corr_kernel.obj
+assets/cpp_vs_python_corr_benchmark.json
 
 src/vertirf/native/*.dll
 src/vertirf/native/*.lib

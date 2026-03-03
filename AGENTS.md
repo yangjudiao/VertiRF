@@ -13,8 +13,8 @@
 
 ## Coding Rules
 
-1. Preserve reproducible baseline behavior in `core/decon.py` and `core/methods.py`.
-2. Add new performance paths without silently changing baseline outputs.
+1. Keep decon as a single fast implementation in `core/decon.py` (no multiple decon mode branches).
+2. Validate serial/parallel consistency whenever decon internals change.
 3. Keep zero-phase filters in `filters/zero_phase.py` only.
 4. Add tests for every behavior change.
 5. Document CLI changes in `README.md` and `tasks.md`.

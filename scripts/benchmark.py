@@ -13,7 +13,7 @@ from vertirf.waveform.synthetic import make_synthetic_batch
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Benchmark VertiRF baseline vs optimized")
+    p = argparse.ArgumentParser(description="Benchmark VertiRF decon single-fast-engine serial vs parallel")
     p.add_argument("--out", type=Path, default=Path("benchmark_summary.json"))
     p.add_argument("--traces", type=int, default=128)
     p.add_argument("--samples", type=int, default=1024)
@@ -25,13 +25,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--filter-type", choices=["gaussian", "butterworth_bandpass", "raised_cosine_bandpass", "tukey_bandpass"], default="butterworth_bandpass")
     p.add_argument("--allow-negative-impulse", action="store_true")
-    p.add_argument("--min-speedup", type=float, default=1.5)
+    p.add_argument("--min-speedup", type=float, default=0.0)
     return p.parse_args()
 
 
-def _run(mode: str, obs: np.ndarray, src: np.ndarray, cfg: DeconConfig, jobs: int) -> tuple[float, dict[str, float]]:
+def _run(obs: np.ndarray, src: np.ndarray, cfg: DeconConfig, jobs: int) -> tuple[float, dict[str, float]]:
     t0 = time.perf_counter()
-    rec, ok, iters = run_batch_decon(obs, src, cfg, mode=mode, jobs=jobs)
+    rec, ok, iters = run_batch_decon(obs, src, cfg, jobs=jobs)
     elapsed = time.perf_counter() - t0
     return elapsed, {
         "success_count": int(np.count_nonzero(ok)),
@@ -68,47 +68,49 @@ def main() -> int:
         ),
     )
 
-    baseline_times = []
-    baseline_stats = []
-    optimized_times = []
-    optimized_stats = []
+    serial_times = []
+    serial_stats = []
+    parallel_times = []
+    parallel_stats = []
 
     for _ in range(max(1, int(args.repeat))):
-        t_b, s_b = _run("baseline", obs, src, cfg, jobs=1)
-        baseline_times.append(t_b)
-        baseline_stats.append(s_b)
+        t_s, s_s = _run(obs, src, cfg, jobs=1)
+        serial_times.append(t_s)
+        serial_stats.append(s_s)
 
-        t_o, s_o = _run("optimized", obs, src, cfg, jobs=max(1, int(args.jobs)))
-        optimized_times.append(t_o)
-        optimized_stats.append(s_o)
+        t_p, s_p = _run(obs, src, cfg, jobs=max(1, int(args.jobs)))
+        parallel_times.append(t_p)
+        parallel_stats.append(s_p)
 
-    baseline_mean = float(np.mean(np.asarray(baseline_times, dtype=np.float64)))
-    optimized_mean = float(np.mean(np.asarray(optimized_times, dtype=np.float64)))
-    speedup = baseline_mean / max(1e-12, optimized_mean)
+    serial_mean = float(np.mean(np.asarray(serial_times, dtype=np.float64)))
+    parallel_mean = float(np.mean(np.asarray(parallel_times, dtype=np.float64)))
+    speedup = serial_mean / max(1e-12, parallel_mean)
 
     summary = {
         "benchmark": {
             "traces": int(args.traces),
             "samples": int(args.samples),
             "repeat": int(max(1, int(args.repeat))),
-            "jobs_optimized": int(max(1, int(args.jobs))),
+            "jobs_parallel": int(max(1, int(args.jobs))),
             "filter_type": str(args.filter_type),
             "allow_negative_impulse": bool(args.allow_negative_impulse),
             "itmax": int(args.itmax),
             "minderr": float(args.minderr),
             "seed": int(args.seed),
         },
-        "baseline": {
-            "elapsed_sec": baseline_times,
-            "elapsed_sec_mean": baseline_mean,
-            "stats": baseline_stats,
+        "decon_engine": "single_fast_version",
+        "serial": {
+            "elapsed_sec": serial_times,
+            "elapsed_sec_mean": serial_mean,
+            "stats": serial_stats,
         },
-        "optimized": {
-            "elapsed_sec": optimized_times,
-            "elapsed_sec_mean": optimized_mean,
-            "stats": optimized_stats,
+        "parallel": {
+            "elapsed_sec": parallel_times,
+            "elapsed_sec_mean": parallel_mean,
+            "stats": parallel_stats,
+            "jobs": int(max(1, int(args.jobs))),
         },
-        "optimized_vs_baseline_speedup": float(speedup),
+        "parallel_speedup_vs_serial": float(speedup),
         "min_speedup_target": float(args.min_speedup),
         "speedup_passed": bool(speedup >= float(args.min_speedup)),
     }

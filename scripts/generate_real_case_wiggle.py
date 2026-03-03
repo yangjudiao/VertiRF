@@ -175,7 +175,6 @@ def main() -> int:
         observed,
         source,
         cfg,
-        mode="optimized",
         jobs=max(1, int(args.jobs)),
     )
 

@@ -10,12 +10,12 @@
 
 ## Phase 2: Core Decon Algorithm
 
-- [x] Implement baseline time-iteration decon.
-- [x] Implement optimized path with prepared reusable state.
+- [x] Implement single fast time-iteration decon engine.
+- [x] Optimize iteration update path with prepared reusable state and incremental residual update.
 - [x] Implement impulse negative-time toggle.
 - Acceptance criteria:
   - `python -m py_compile` passes for all source files.
-  - CLI supports baseline/optimized and impulse toggle options.
+  - CLI exposes one decon execution path (no baseline/optimized/ultra branch confusion).
 
 ## Phase 3: Filter Extensions
 
@@ -79,4 +79,4 @@
 - [x] Document data build and replay commands in README.
 - Acceptance criteria:
   - `engineering_dataset.npz` is generated with metadata summary.
-  - `repro_report.json` includes runtime speedup and baseline/optimized consistency.
+  - `repro_report.json` includes runtime speedup and serial/parallel consistency.

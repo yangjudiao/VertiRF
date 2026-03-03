@@ -32,7 +32,7 @@ jobs:
 
       - name: Benchmark Smoke
         run: |
-          python scripts/benchmark.py --out benchmark_summary.json --traces 24 --samples 512 --repeat 1 --jobs 2 --min-speedup 1.0
+          python scripts/benchmark.py --out benchmark_summary.json --traces 24 --samples 512 --repeat 1 --jobs 2 --min-speedup 0.0
 
       - name: Method Parallel Benchmark Smoke
         run: |

@@ -38,7 +38,7 @@ def main() -> int:
         ax.annotate("", xy=(x1, y1), xytext=(x0, y0), arrowprops=dict(arrowstyle="->", lw=1.8, color="#1d4ed8"))
 
     ax.text(50, 26, "VertiRF Processing Pipeline", ha="center", va="center", fontsize=14, color="#0f172a", fontweight="bold")
-    ax.text(50, 3.2, "baseline vs optimized | gaussian / butterworth / raised-cosine / tukey", ha="center", fontsize=9, color="#475569")
+    ax.text(50, 3.2, "single-fast decon | gaussian / butterworth / raised-cosine / tukey", ha="center", fontsize=9, color="#475569")
 
     fig.tight_layout()
     fig.savefig(out)
