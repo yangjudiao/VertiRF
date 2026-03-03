@@ -21,6 +21,7 @@ VertiRF 是一个独立开源项目，用于垂向接收函数流程中的 time-
   - `allow_negative_impulse=true`: full-lag search
   - `allow_negative_impulse=false`: non-negative lag only
 - AI-agent-callable JSON-RPC interface (`vertirf.agent.server`).
+- Engineering benchmark dataset builder and reproducible benchmark runner.
 
 ## Project Layout | 目录结构
 
@@ -36,7 +37,9 @@ VertiRF/
     cli.py
   tests/
   scripts/
+  examples/
   assets/
+  .github/workflows/
   architecture.md
   tasks.md
   AGENTS.md
@@ -73,11 +76,56 @@ Run tests:
 python -m pytest -q
 ```
 
+Run style check:
+
+```bash
+ruff check src tests scripts examples
+```
+
 Agent self-test:
 
 ```bash
 python -m vertirf.agent.server --self-test
 ```
+
+## MCP Client Example | MCP 客户端示例
+
+Minimal JSON-RPC client example:
+
+```bash
+python examples/mcp_client_example.py
+```
+
+This script starts `vertirf.agent.server`, sends `ping` and `run_decon_synthetic` requests, and prints responses.
+
+## Engineering Benchmark Dataset | 工程基准数据集
+
+Build dataset from existing event NPZ files:
+
+```bash
+python scripts/build_engineering_dataset.py \
+  --input-dir D:\works_2\seismic_data_retrieval_1\data\prompt19\p14_like_lowpass_t200\convolved_npz \
+  --out data/engineering_benchmark/engineering_dataset.npz \
+  --events 12 --stations 20 --component z --seed 20260303
+```
+
+Run reproducible engineering benchmark:
+
+```bash
+python scripts/run_engineering_repro.py \
+  --dataset data/engineering_benchmark/engineering_dataset.npz \
+  --out data/engineering_benchmark/repro_report.json \
+  --jobs 4 --repeat 2 --filter-type butterworth_bandpass --allow-negative-impulse
+```
+
+## CI | 持续集成
+
+GitHub Actions workflow: `.github/workflows/ci.yml`
+
+Pipeline includes:
+- `ruff` style check
+- `pytest`
+- benchmark smoke run and artifact upload (`benchmark_summary.json`)
 
 ## Pipeline Overview | 流程示意
 

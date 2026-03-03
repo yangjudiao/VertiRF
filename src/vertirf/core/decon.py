@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-import math
 from typing import Literal
 
 import numpy as np

@@ -49,3 +49,21 @@
 - [x] Keep architecture/tasks/AGENTS aligned with implemented code.
 - Acceptance criteria:
   - A new user can run quickstart, tests, and benchmark without hidden steps.
+
+## Phase 7: CI and Example Clients
+
+- [x] Add GitHub Actions CI workflow.
+- [x] Add style check gate (`ruff`).
+- [x] Add minimal MCP client example.
+- Acceptance criteria:
+  - CI workflow runs style check + tests + benchmark smoke.
+  - Example client can call `ping` and `run_decon_synthetic`.
+
+## Phase 8: Engineering Benchmark Reproducibility
+
+- [x] Add engineering dataset build script from event NPZ sources.
+- [x] Add reproducible benchmark runner on saved dataset.
+- [x] Document data build and replay commands in README.
+- Acceptance criteria:
+  - `engineering_dataset.npz` is generated with metadata summary.
+  - `repro_report.json` includes runtime speedup and baseline/optimized consistency.

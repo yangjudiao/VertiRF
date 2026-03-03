@@ -7,5 +7,9 @@ __pycache__/
 .venv/
 venv/
 benchmark_summary.json
+benchmark_smoke_ci.json
 output_run_synthetic.json
 test_report.txt
+
+data/engineering_benchmark/*.npz
+data/engineering_benchmark/*.json
