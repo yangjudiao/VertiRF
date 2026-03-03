@@ -92,3 +92,15 @@
   - `run_batch_decon` remains single implementation (no mode split).
   - `tests/test_decon.py` includes strict reference-equivalence checks and passes.
   - `scripts/benchmark_decon_legacy_equiv.py` generates JSON with consistency + speedup.
+
+## Phase 11: Prompt22-Compatible Corr Convergence + Equivalent Speedup
+
+- [x] Converge corr semantics to prompt22-compatible spectral retrieval while keeping single-engine architecture.
+- [x] Keep equivalent-only optimizations (shared precomputed spectral terms + efficient row processing).
+- [x] Add strict corr legacy-reference equivalence tests.
+- [x] Add benchmark script for corr legacy-reference vs optimized-single-engine comparison.
+- [x] Re-verify corr/decon parallel-call capability in tests and agent self-test.
+- Acceptance criteria:
+  - Corr path is single implementation regardless of mode flag.
+  - `tests/test_corr_stack.py` includes strict reference-equivalence checks and passes.
+  - `scripts/benchmark_corr_legacy_equiv.py` generates JSON with consistency + speedup.

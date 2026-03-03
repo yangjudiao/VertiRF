@@ -14,6 +14,15 @@ from vertirf.core.methods import MethodConfig, run_batch_method
 from vertirf.filters.zero_phase import FilterSpec
 
 
+def _parse_bool(v: str) -> bool:
+    s = str(v).strip().lower()
+    if s in {"1", "true", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"invalid bool value: {v}")
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate real-case decon/corr/stack wiggle figure")
     p.add_argument(
@@ -35,7 +44,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--allow-negative-impulse", action="store_true")
 
     p.add_argument("--corr-smoothing-bandwidth-hz", type=float, default=0.25)
-    p.add_argument("--corr-post-filter-type", default="gaussian")
+    p.add_argument("--corr-divide-denom", type=_parse_bool, default=True)
+    p.add_argument("--corr-water-level", type=float, default=1e-4)
+    p.add_argument("--corr-shift-sec", type=float, default=0.0)
+    p.add_argument("--corr-post-filter-type", default="none")
     p.add_argument("--stack-peak-window-start-sec", type=float, default=-2.0)
     p.add_argument("--stack-peak-window-end-sec", type=float, default=20.0)
 
@@ -118,6 +130,9 @@ def _build_cfg(method: str, dt: float, args: argparse.Namespace) -> MethodConfig
             tukey_alpha=0.3,
         ),
         corr_smoothing_bandwidth_hz=float(args.corr_smoothing_bandwidth_hz),
+        corr_divide_denom=bool(args.corr_divide_denom),
+        corr_water_level=float(args.corr_water_level),
+        corr_shift_sec=float(args.corr_shift_sec),
         corr_post_filter_type=str(args.corr_post_filter_type),
         corr_post_gauss_f0=float(np.pi),
         corr_post_low_hz=float(args.low_hz),
@@ -223,6 +238,9 @@ def main() -> int:
         "time_window_sec": [float(args.time_start_sec), float(args.time_end_sec)],
         "filter_type": str(args.filter_type),
         "corr_smoothing_bandwidth_hz": float(args.corr_smoothing_bandwidth_hz),
+        "corr_divide_denom": bool(args.corr_divide_denom),
+        "corr_water_level": float(args.corr_water_level),
+        "corr_shift_sec": float(args.corr_shift_sec),
         "stack_peak_window_sec": [
             float(args.stack_peak_window_start_sec),
             float(args.stack_peak_window_end_sec),

@@ -48,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Corr-specific
     common.add_argument("--corr-smoothing-bandwidth-hz", type=float, default=0.35)
+    common.add_argument("--corr-divide-denom", type=_parse_bool, default=True)
+    common.add_argument("--corr-water-level", type=float, default=1e-4)
+    common.add_argument("--corr-shift-sec", type=float, default=0.0)
     common.add_argument("--corr-post-filter-type", choices=POST_FILTER_TYPES, default="none")
     common.add_argument("--corr-post-gauss-f0", type=float, default=np.pi)
     common.add_argument("--corr-post-low-hz", type=float, default=0.1)
@@ -101,6 +104,9 @@ def _build_method_cfg(args: argparse.Namespace) -> MethodConfig:
         allow_negative_impulse=bool(args.allow_negative_impulse),
         filter_spec=_build_filter_spec(args),
         corr_smoothing_bandwidth_hz=float(args.corr_smoothing_bandwidth_hz),
+        corr_divide_denom=bool(args.corr_divide_denom),
+        corr_water_level=float(args.corr_water_level),
+        corr_shift_sec=float(args.corr_shift_sec),
         corr_post_filter_type=str(args.corr_post_filter_type),
         corr_post_gauss_f0=float(args.corr_post_gauss_f0),
         corr_post_low_hz=float(args.corr_post_low_hz),

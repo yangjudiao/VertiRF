@@ -50,7 +50,10 @@ def _base_cfg(args: argparse.Namespace, method: str) -> MethodConfig:
             tukey_alpha=0.3,
         ),
         corr_smoothing_bandwidth_hz=0.25,
-        corr_post_filter_type="gaussian",
+        corr_divide_denom=True,
+        corr_water_level=1e-4,
+        corr_shift_sec=0.0,
+        corr_post_filter_type="none",
         stack_peak_window_start_sec=-2.0,
         stack_peak_window_end_sec=20.0,
     )

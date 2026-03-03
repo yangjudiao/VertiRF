@@ -12,7 +12,7 @@ VertiRF 是一个独立开源工具包，面向垂向接收函数（VRF）流程
 
 - Three methods in one interface:
   - `decon`: prompt22-compatible time-iteration deconvolution (single fast engine, legacy-equivalent)
-  - `corr`: cross-correlation retrieval (single fast engine) with configurable smoothing and post-filter
+  - `corr`: prompt22-compatible spectral cross-correlation retrieval (single fast engine, legacy-equivalent)
   - `stack`: peak-window aligned stacking with configurable peak window
 - Zero-phase filter options:
   - `gaussian`
@@ -63,8 +63,11 @@ python -m vertirf.cli run-synthetic --method decon --jobs 2
 # corr (single fast engine; mode flag optional)
 python -m vertirf.cli run-synthetic \
   --method corr --jobs 4 \
-  --corr-smoothing-bandwidth-hz 0.25 \
-  --corr-post-filter-type gaussian
+  --corr-smoothing-bandwidth-hz 0.2 \
+  --corr-divide-denom true \
+  --corr-water-level 1e-4 \
+  --corr-shift-sec 0.0 \
+  --corr-post-filter-type none
 
 # stack (peak window selectable)
 python -m vertirf.cli run-synthetic \
@@ -100,6 +103,21 @@ python scripts/benchmark_decon_legacy_equiv.py \
 This benchmark compares:
 - `legacy_reference`: direct prompt22-compatible reconstruction loop
 - `optimized_single_engine`: current decon implementation
+
+and reports both numerical equivalence (`mae/max_abs/flatten_corrcoef`) and speedup.
+
+### Corr Legacy-Equivalence Benchmark
+
+```bash
+python scripts/benchmark_corr_legacy_equiv.py \
+  --out benchmark_corr_legacy_equiv_medium.json \
+  --traces 120 --samples 2001 --repeat 3 --jobs 1 \
+  --smooth-hz 0.2 --water-level 1e-4 --shift-sec 0.0 --divide-denom true
+```
+
+This benchmark compares:
+- `legacy_reference`: prompt22-compatible corr retrieval loop
+- `optimized_single_engine`: current corr implementation
 
 and reports both numerical equivalence (`mae/max_abs/flatten_corrcoef`) and speedup.
 

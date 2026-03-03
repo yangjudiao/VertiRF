@@ -1,0 +1,9 @@
+{
+  "events_checked": 30,
+  "pair_count": 1800,
+  "mae_mean": 0.0,
+  "max_abs_max": 0.0,
+  "corrcoef_mean_finite": 1.0,
+  "corrcoef_median_finite": 1.0,
+  "corrcoef_nan_count": 667
+}

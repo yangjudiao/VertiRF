@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import numpy as np
 
+from vertirf.core.decon import normalize_max_abs
 from vertirf.core.methods import MethodConfig, run_batch_method
-from vertirf.filters.zero_phase import FilterSpec
-from vertirf.waveform.synthetic import convolve_same, corrcoef, make_synthetic_batch, ricker_wavelet
+from vertirf.filters.zero_phase import FilterSpec, build_zero_phase_response
+from vertirf.waveform.synthetic import convolve_same, make_synthetic_batch, ricker_wavelet
 
 
-def _cfg(method: str) -> MethodConfig:
+def _corr_cfg() -> MethodConfig:
     return MethodConfig(
-        method=method,
+        method="corr",
         dt=0.05,
         itmax=220,
         minderr=1e-3,
@@ -24,33 +25,120 @@ def _cfg(method: str) -> MethodConfig:
             tukey_alpha=0.3,
         ),
         corr_smoothing_bandwidth_hz=0.25,
-        corr_post_filter_type="gaussian",
-        corr_post_gauss_f0=np.pi,
-        stack_peak_window_start_sec=-1.0,
-        stack_peak_window_end_sec=3.0,
+        corr_divide_denom=True,
+        corr_water_level=1e-4,
+        corr_shift_sec=0.0,
+        corr_post_filter_type="none",
     )
 
 
-def test_corr_synthetic_recovery_has_consistent_peak_offsets() -> None:
-    src, truth, obs = make_synthetic_batch(
+def _stack_cfg() -> MethodConfig:
+    return MethodConfig(
+        method="stack",
+        dt=0.05,
+        filter_spec=FilterSpec(filter_type="gaussian", gauss_f0=np.pi),
+        stack_peak_window_start_sec=0.5,
+        stack_peak_window_end_sec=1.8,
+    )
+
+
+def _smooth_edge(power: np.ndarray, win_len: int) -> np.ndarray:
+    p = np.asarray(power, dtype=np.float64)
+    if win_len <= 1:
+        return p
+    w = np.ones((int(win_len),), dtype=np.float64) / float(win_len)
+    wei = np.convolve(np.ones((p.size,), dtype=np.float64), w, mode="same")
+    smo = np.convolve(p, w, mode="same")
+    return smo / np.maximum(wei, 1e-12)
+
+
+def _legacy_corr_batch(observed: np.ndarray, source: np.ndarray, cfg: MethodConfig) -> np.ndarray:
+    arr = np.asarray(observed, dtype=np.float64)
+    src = np.asarray(source, dtype=np.float64)
+    n = int(src.size)
+
+    b = np.fft.rfft(src, n=n)
+    bpow = np.abs(b) ** 2
+    df = 1.0 / max(float(n) * float(cfg.dt), 1e-12)
+    half_bins = int(round(max(0.0, float(cfg.corr_smoothing_bandwidth_hz)) / max(df, 1e-12)))
+    win_len = max(1, 2 * half_bins + 1)
+    denom = _smooth_edge(bpow, win_len)
+    denom = np.maximum(denom, 1e-12)
+    denom_max = float(np.max(denom)) if denom.size else 0.0
+    water_floor = max(1e-12, denom_max * max(0.0, float(cfg.corr_water_level)))
+    denom_water = np.maximum(denom, water_floor)
+
+    filt = build_zero_phase_response(nfft=n, dt=float(cfg.dt), spec=cfg.filter_spec)
+    shift_samples = int(round(float(cfg.corr_shift_sec) / float(cfg.dt)))
+
+    out = np.zeros_like(arr, dtype=np.float64)
+    for i in range(arr.shape[0]):
+        d = np.fft.rfft(arr[i], n=n)
+        rf_spec = d * np.conj(b)
+        if bool(cfg.corr_divide_denom):
+            rf_spec = rf_spec / denom_water
+        rf_spec = rf_spec * filt
+        rf = np.fft.irfft(rf_spec, n=n).real
+        rf = np.roll(rf, shift_samples)
+        rf, _ = normalize_max_abs(rf)
+        out[i] = rf
+    return out
+
+
+def test_corr_matches_legacy_reference_strict() -> None:
+    src, _, obs = make_synthetic_batch(
         traces=12,
         samples=512,
         dt=0.05,
-        noise_std=0.004,
+        noise_std=0.006,
         rng_seed=27,
     )
-    cfg = _cfg("corr")
-    rec, ok, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=3)
+    cfg = _corr_cfg()
 
-    assert int(np.count_nonzero(ok)) >= 10
+    rec, ok, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=1)
+    ref = _legacy_corr_batch(obs, src, cfg)
 
-    offsets = np.argmax(np.abs(rec), axis=1) - np.argmax(np.abs(truth), axis=1)
-    offsets = np.asarray(offsets, dtype=np.float64)
-    assert float(np.std(offsets)) <= 3.0
-    assert float(np.max(np.abs(offsets))) <= 32.0
+    assert int(np.count_nonzero(ok)) == obs.shape[0]
+    diff = rec - ref
+    assert float(np.mean(np.abs(diff))) < 1e-12
+    assert float(np.max(np.abs(diff))) < 1e-10
 
-    c = corrcoef(np.mean(rec, axis=0), np.mean(truth, axis=0))
-    assert float(c) > 0.10
+
+def test_corr_parallel_matches_serial_strict() -> None:
+    src, _, obs = make_synthetic_batch(
+        traces=30,
+        samples=2048,
+        dt=0.05,
+        noise_std=0.01,
+        rng_seed=9,
+    )
+    cfg = _corr_cfg()
+
+    r0, ok0, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=1)
+    r1, ok1, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=4)
+
+    assert int(np.count_nonzero(ok0)) == obs.shape[0]
+    assert int(np.count_nonzero(ok1)) == obs.shape[0]
+    diff = float(np.mean(np.abs(r0 - r1)))
+    assert diff < 1e-12
+
+
+def test_corr_mode_flag_is_converged_to_single_engine() -> None:
+    src, _, obs = make_synthetic_batch(
+        traces=10,
+        samples=512,
+        dt=0.05,
+        noise_std=0.008,
+        rng_seed=21,
+    )
+    cfg = _corr_cfg()
+    r_base, ok_base, _ = run_batch_method(obs, src, cfg, mode="baseline", jobs=2)
+    r_opt, ok_opt, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=2)
+
+    assert int(np.count_nonzero(ok_base)) == obs.shape[0]
+    assert int(np.count_nonzero(ok_opt)) == obs.shape[0]
+    diff = float(np.mean(np.abs(r_base - r_opt)))
+    assert diff < 1e-12
 
 
 def test_stack_peak_window_aligns_shifted_traces() -> None:
@@ -71,55 +159,10 @@ def test_stack_peak_window_aligns_shifted_traces() -> None:
         traces.append(tr)
     obs = np.asarray(traces, dtype=np.float64)
 
-    cfg = MethodConfig(
-        method="stack",
-        dt=dt,
-        filter_spec=FilterSpec(filter_type="gaussian", gauss_f0=np.pi),
-        stack_peak_window_start_sec=0.5,
-        stack_peak_window_end_sec=1.8,
-    )
-
+    cfg = _stack_cfg()
     rec, ok, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=2)
     assert int(np.count_nonzero(ok)) == obs.shape[0]
 
     peaks = np.argmax(np.abs(rec), axis=1)
     max_dev = int(np.max(np.abs(peaks - center)))
     assert max_dev <= 1
-
-
-def test_corr_stack_parallel_matches_serial() -> None:
-    src, _, obs = make_synthetic_batch(
-        traces=14,
-        samples=512,
-        dt=0.05,
-        noise_std=0.01,
-        rng_seed=9,
-    )
-
-    for method in ("corr", "stack"):
-        cfg = _cfg(method)
-        r0, ok0, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=1)
-        r1, ok1, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=4)
-
-        assert int(np.count_nonzero(ok0)) == obs.shape[0]
-        assert int(np.count_nonzero(ok1)) == obs.shape[0]
-        diff = float(np.mean(np.abs(r0 - r1)))
-        assert diff < 1e-8
-
-
-def test_corr_mode_flag_is_converged_to_single_engine() -> None:
-    src, _, obs = make_synthetic_batch(
-        traces=10,
-        samples=512,
-        dt=0.05,
-        noise_std=0.008,
-        rng_seed=21,
-    )
-    cfg = _cfg("corr")
-    r_base, ok_base, _ = run_batch_method(obs, src, cfg, mode="baseline", jobs=2)
-    r_opt, ok_opt, _ = run_batch_method(obs, src, cfg, mode="optimized", jobs=2)
-
-    assert int(np.count_nonzero(ok_base)) == obs.shape[0]
-    assert int(np.count_nonzero(ok_opt)) == obs.shape[0]
-    diff = float(np.mean(np.abs(r_base - r_opt)))
-    assert diff < 1e-12

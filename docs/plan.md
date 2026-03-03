@@ -83,3 +83,92 @@
   - `python -m pytest -q` passed (`11 passed`).
   - `python -m vertirf.agent.server --self-test` passed.
   - Commit and push status: completed (see git log for commit hash).
+
+## Task: Corr Prompt22-Compatible Convergence + Equivalent Speedup
+
+## Step C1: Align Corr Semantics To Prompt22 While Keeping Single Engine
+- Status: Completed (2026-03-03)
+- Actions:
+  - Refactor corr path in `core/methods.py` to prompt22-compatible retrieval:
+    - spectral cross-correlation (`D * conj(B)`),
+    - optional denominator division with source-power smoothing and water-level,
+    - zero-phase bandpass multiply,
+    - output shift and max-abs row normalization.
+  - Keep `run_batch_method` single corr engine (no baseline/optimized branch split).
+  - Preserve `jobs` parallel-call capability.
+- Acceptance Criteria (AC):
+  - AC-C1.1: Corr has one algorithmic path regardless of mode flag.
+  - AC-C1.2: Corr config supports prompt22-equivalent controls.
+  - AC-C1.3: `jobs>1` remains callable and stable.
+- Execution Result:
+  - Refactored corr in `src/vertirf/core/methods.py` to prompt22-compatible spectral retrieval:
+    - `rf_spec = D * conj(B)`
+    - optional divide by smoothed source-power denominator with water-level floor
+    - multiply zero-phase filter response
+    - time shift and max-abs row normalization
+  - Corr remains single-engine regardless of mode flag.
+  - Added prompt22-relevant corr controls into `MethodConfig`:
+    - `corr_divide_denom`
+    - `corr_water_level`
+    - `corr_shift_sec`
+  - Updated CLI/agent wiring:
+    - `src/vertirf/cli.py`
+    - `src/vertirf/agent/server.py`
+
+## Step C2: Consistency + Parallel Tests
+- Status: Completed (2026-03-03)
+- Actions:
+  - Add strict legacy-reference corr equivalence tests.
+  - Keep/extend corr serial-vs-parallel consistency test.
+  - Add decon/corr parallel-call smoke validation.
+- Acceptance Criteria (AC):
+  - AC-C2.1: Corr legacy-equivalence tests pass with near-machine-precision diff.
+  - AC-C2.2: Corr/decon serial-vs-parallel consistency gates pass.
+- Execution Result:
+  - Reworked `tests/test_corr_stack.py`:
+    - strict corr legacy-reference equivalence test
+    - corr serial-vs-parallel strict consistency test
+    - corr mode-flag convergence test (`baseline` vs `optimized`)
+    - retained stack alignment test
+  - Decon parallel consistency remains covered in `tests/test_decon.py`.
+  - Gate snapshot:
+    - `python -m pytest -q tests/test_corr_stack.py tests/test_agent.py tests/test_decon.py` -> `10 passed`.
+
+## Step C3: Efficiency Benchmark + Real-Data Consistency Check
+- Status: Completed (2026-03-03)
+- Actions:
+  - Add corr benchmark script comparing legacy-reference corr vs optimized single engine.
+  - Produce JSON artifacts for medium/large workloads.
+  - Run prompt22-real sample consistency check against reference implementation.
+- Acceptance Criteria (AC):
+  - AC-C3.1: Benchmark artifacts include consistency and speedup fields.
+  - AC-C3.2: Speedup > 1.0x with strict consistency metrics.
+- Execution Result:
+  - Added corr benchmark script:
+    - `scripts/benchmark_corr_legacy_equiv.py`
+  - Medium benchmark artifact:
+    - `benchmark_corr_legacy_equiv_medium.json`
+    - `speedup_vs_legacy = 1.0640x`
+    - consistency: `mae=0`, `max_abs=0`, `flatten_corrcoef=1.0`
+  - Large benchmark artifact:
+    - `benchmark_corr_legacy_equiv_large.json`
+    - `speedup_vs_legacy = 1.1425x`
+    - consistency: `mae=0`, `max_abs=0`, `flatten_corrcoef≈1.0`
+  - Prompt22 real-data sample consistency artifact (30 events):
+    - `assets/corr_prompt22_real_consistency_20260303.json`
+    - `pair_count=1800`, `mae_mean=0`, `max_abs_max=0`
+
+## Step C4: Gates + GitHub Push
+- Status: Completed (2026-03-03)
+- Actions:
+  - Run `ruff`, `pytest`, method benchmark, agent self-test.
+  - Commit and push to `origin/main`.
+- Acceptance Criteria (AC):
+  - AC-C4.1: all gates pass.
+  - AC-C4.2: remote includes new commit hash.
+- Execution Result:
+  - `ruff check src tests scripts examples` passed.
+  - `python -m pytest -q` passed (`11 passed`).
+  - `python -m vertirf.agent.server --self-test` passed.
+  - `python scripts/method_parallel_benchmark.py --out method_parallel_benchmark_summary.json` executed successfully, confirming decon/corr/stack parallel-call capability.
+  - Commit and push: completed (see git log for commit hash).

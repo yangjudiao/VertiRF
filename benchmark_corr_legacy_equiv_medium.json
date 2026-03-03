@@ -1,0 +1,43 @@
+{
+  "benchmark": {
+    "traces": 120,
+    "samples": 2001,
+    "dt": 0.05,
+    "repeat": 3,
+    "jobs": 1,
+    "seed": 7,
+    "noise_std": 0.015,
+    "corr_smoothing_bandwidth_hz": 0.2,
+    "corr_divide_denom": true,
+    "corr_water_level": 0.0001,
+    "corr_shift_sec": 0.0
+  },
+  "legacy_reference": {
+    "elapsed_sec": [
+      0.006422300008125603,
+      0.00601229997118935,
+      0.0059003999922424555
+    ],
+    "elapsed_sec_mean": 0.006111666657185803,
+    "success_count": 120,
+    "mean_steps": 1.0
+  },
+  "optimized_single_engine": {
+    "elapsed_sec": [
+      0.005883599980734289,
+      0.0056998999789357185,
+      0.005648599995765835
+    ],
+    "elapsed_sec_mean": 0.005744033318478614,
+    "success_count": 120,
+    "mean_steps": 1.0
+  },
+  "consistency": {
+    "mae": 0.0,
+    "max_abs": 0.0,
+    "rmse": 0.0,
+    "flatten_corrcoef": 1.0,
+    "trace_count": 120
+  },
+  "speedup_vs_legacy": 1.0640026473252704
+}

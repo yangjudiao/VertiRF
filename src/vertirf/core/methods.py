@@ -8,7 +8,11 @@ from typing import Literal
 import numpy as np
 
 from vertirf.core.decon import DeconConfig, normalize_max_abs, run_batch_decon
-from vertirf.filters.zero_phase import FilterSpec, apply_zero_phase_filter
+from vertirf.filters.zero_phase import (
+    FilterSpec,
+    apply_zero_phase_filter,
+    build_zero_phase_response,
+)
 
 MethodName = Literal["decon", "corr", "stack"]
 RunMode = Literal["baseline", "optimized"]
@@ -24,8 +28,11 @@ class MethodConfig:
     allow_negative_impulse: bool = False
     filter_spec: FilterSpec = FilterSpec()
 
-    # Corr-specific options.
-    corr_smoothing_bandwidth_hz: float = 0.35
+    # Corr-specific options (prompt22-compatible semantics).
+    corr_smoothing_bandwidth_hz: float = 0.2
+    corr_divide_denom: bool = True
+    corr_water_level: float = 1e-4
+    corr_shift_sec: float = 0.0
     corr_post_filter_type: str = "none"
     corr_post_gauss_f0: float = math.pi
     corr_post_low_hz: float = 0.1
@@ -44,12 +51,11 @@ class MethodPreparedState:
     n_samples: int
     dt: float
 
-    source_filtered: np.ndarray
-    source_energy: float
-
-    corr_fft_kernel: np.ndarray
-    nfft_conv: int
-    corr_smoothing_response: np.ndarray
+    source_fft: np.ndarray
+    source_fft_conj: np.ndarray
+    corr_denom_water: np.ndarray
+    corr_filter_response: np.ndarray
+    corr_shift_samples: int
 
 
 def _to_decon_config(cfg: MethodConfig) -> DeconConfig:
@@ -63,23 +69,14 @@ def _to_decon_config(cfg: MethodConfig) -> DeconConfig:
     )
 
 
-def _same_fft_length(n: int) -> int:
-    return 1 << int((2 * n - 2).bit_length())
-
-
-def _correlate_same_fft(x: np.ndarray, kernel_fft: np.ndarray, nfft_conv: int) -> np.ndarray:
-    n = int(x.size)
-    full = np.fft.irfft(np.fft.rfft(x, nfft_conv) * kernel_fft, nfft_conv).real[: (2 * n - 1)]
-    start = (n - 1) // 2
-    return full[start : start + n]
-
-
-def _corr_smoothing_response(n: int, dt: float, bandwidth_hz: float) -> np.ndarray:
-    bw = float(bandwidth_hz)
-    if bw <= 0.0:
-        return np.ones((n // 2 + 1,), dtype=np.float64)
-    f = np.fft.rfftfreq(n, d=float(dt))
-    return np.exp(-0.5 * (f / max(1e-9, bw)) ** 2)
+def _corr_smooth_spectrum_edge_comp(power: np.ndarray, win_len: int) -> np.ndarray:
+    p = np.asarray(power, dtype=np.float64)
+    if win_len <= 1:
+        return p
+    w = np.ones((int(win_len),), dtype=np.float64) / float(win_len)
+    wei = np.convolve(np.ones((p.size,), dtype=np.float64), w, mode="same")
+    smo = np.convolve(p, w, mode="same")
+    return smo / np.maximum(wei, 1e-12)
 
 
 def _corr_post_filter_spec(cfg: MethodConfig) -> FilterSpec | None:
@@ -100,47 +97,108 @@ def _corr_post_filter_spec(cfg: MethodConfig) -> FilterSpec | None:
 def prepare_method_state(source: np.ndarray, cfg: MethodConfig) -> MethodPreparedState:
     src = np.asarray(source, dtype=np.float64)
     n = int(src.size)
-    src_f = apply_zero_phase_filter(src, cfg.dt, cfg.filter_spec)
-    src_f, _ = normalize_max_abs(src_f)
+    dt = float(cfg.dt)
 
-    nfft_conv = _same_fft_length(n)
-    corr_kernel = np.flip(src_f)
-    corr_fft = np.fft.rfft(corr_kernel, nfft_conv)
+    source_fft = np.fft.rfft(src, n=n)
+    source_pow = np.abs(source_fft) ** 2
+
+    df = 1.0 / max(float(n) * dt, 1e-12)
+    half_bins = int(round(max(0.0, float(cfg.corr_smoothing_bandwidth_hz)) / max(df, 1e-12)))
+    win_len = max(1, 2 * half_bins + 1)
+    denom = _corr_smooth_spectrum_edge_comp(source_pow, win_len)
+    denom = np.maximum(denom, 1e-12)
+    denom_max = float(np.max(denom)) if denom.size else 0.0
+    water_floor = max(1e-12, denom_max * max(0.0, float(cfg.corr_water_level)))
+    denom_water = np.maximum(denom, water_floor)
+
+    corr_filter_response = build_zero_phase_response(nfft=n, dt=dt, spec=cfg.filter_spec)
+    corr_shift_samples = int(round(float(cfg.corr_shift_sec) / dt))
 
     return MethodPreparedState(
         method=cfg.method,
         n_samples=n,
-        dt=float(cfg.dt),
-        source_filtered=src_f,
-        source_energy=float(np.sum(src_f * src_f)) + 1e-12,
-        corr_fft_kernel=corr_fft,
-        nfft_conv=nfft_conv,
-        corr_smoothing_response=_corr_smoothing_response(n, cfg.dt, cfg.corr_smoothing_bandwidth_hz),
+        dt=dt,
+        source_fft=np.asarray(source_fft, dtype=np.complex128),
+        source_fft_conj=np.asarray(np.conj(source_fft), dtype=np.complex128),
+        corr_denom_water=np.asarray(denom_water, dtype=np.float64),
+        corr_filter_response=np.asarray(corr_filter_response, dtype=np.float64),
+        corr_shift_samples=int(corr_shift_samples),
     )
 
 
-def _run_corr_single_fast(
-    obs: np.ndarray,
+def _normalize_rows_max_abs(mat: np.ndarray) -> np.ndarray:
+    arr = np.asarray(mat, dtype=np.float64)
+    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    amps = np.max(np.abs(arr), axis=1)
+    valid = amps > 0.0
+    out = arr.copy()
+    out[valid] = out[valid] / amps[valid, None]
+    out[~valid] = 0.0
+    return out
+
+
+def _run_corr_single_prompt22(
+    observed_row: np.ndarray,
     cfg: MethodConfig,
     prepared: MethodPreparedState,
+    post_filter_spec: FilterSpec | None,
 ) -> np.ndarray:
-    x = apply_zero_phase_filter(np.asarray(obs, dtype=np.float64), cfg.dt, cfg.filter_spec)
-    if int(prepared.n_samples) >= int(cfg.corr_fft_switch_samples):
-        cc = _correlate_same_fft(x, prepared.corr_fft_kernel, prepared.nfft_conv)
-    else:
-        cc = np.correlate(x, prepared.source_filtered, mode="same")
-    cc = cc / prepared.source_energy
+    row = np.asarray(observed_row, dtype=np.float64)
+    d = np.fft.rfft(row, n=prepared.n_samples)
+    rf_spec = d * prepared.source_fft_conj
 
-    if float(cfg.corr_smoothing_bandwidth_hz) > 0.0:
-        n = cc.size
-        cc = np.fft.irfft(np.fft.rfft(cc, n) * prepared.corr_smoothing_response, n)
+    if bool(cfg.corr_divide_denom):
+        rf_spec = rf_spec / prepared.corr_denom_water
+
+    rf_spec = rf_spec * prepared.corr_filter_response
+    rf = np.fft.irfft(rf_spec, n=prepared.n_samples).real
+
+    if int(prepared.corr_shift_samples) != 0:
+        rf = np.roll(rf, int(prepared.corr_shift_samples))
+
+    if post_filter_spec is not None:
+        rf = apply_zero_phase_filter(rf, cfg.dt, post_filter_spec)
+
+    rf, _ = normalize_max_abs(rf)
+    return rf
+
+
+def _run_corr_rows_prompt22(
+    observed: np.ndarray,
+    cfg: MethodConfig,
+    prepared: MethodPreparedState,
+    jobs: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    arr = np.asarray(observed, dtype=np.float64)
+    n_traces = int(arr.shape[0])
+    n_samples = int(arr.shape[1])
+
+    out = np.zeros((n_traces, n_samples), dtype=np.float64)
+    ok = np.zeros((n_traces,), dtype=bool)
+    steps = np.ones((n_traces,), dtype=np.int32)
 
     post = _corr_post_filter_spec(cfg)
-    if post is not None:
-        cc = apply_zero_phase_filter(cc, cfg.dt, post)
+    n_jobs = max(1, int(jobs))
 
-    cc, _ = normalize_max_abs(cc)
-    return cc
+    if n_jobs == 1 or n_traces < 2:
+        for i in range(n_traces):
+            y = _run_corr_single_prompt22(arr[i], cfg, prepared, post)
+            out[i] = y
+            ok[i] = bool(np.isfinite(y).all())
+        return out, ok, steps
+
+    def _job(i: int) -> tuple[int, np.ndarray]:
+        y = _run_corr_single_prompt22(arr[i], cfg, prepared, post)
+        return i, y
+
+    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+        futures = [ex.submit(_job, i) for i in range(n_traces)]
+        for fut in futures:
+            i, y = fut.result()
+            out[i] = y
+            ok[i] = bool(np.isfinite(y).all())
+
+    return out, ok, steps
 
 
 def _stack_peak_window_indices(n: int, dt: float, t0: float, t1: float) -> np.ndarray:
@@ -195,12 +253,9 @@ def run_batch_method(
 
     if method == "corr":
         prepared = prepare_method_state(src, cfg)
+        return _run_corr_rows_prompt22(arr, cfg, prepared, jobs=n_jobs)
 
-        def _job(i: int) -> tuple[int, np.ndarray]:
-            y = _run_corr_single_fast(arr[i], cfg, prepared)
-            return i, y
-
-    elif method == "stack":
+    if method == "stack":
         peak_idx = _stack_peak_window_indices(
             n=src.size,
             dt=cfg.dt,
@@ -212,23 +267,22 @@ def run_batch_method(
             y = _run_stack_single(arr[i], cfg, peak_idx)
             return i, y
 
-    else:
-        raise ValueError(f"unsupported method: {cfg.method}")
+        if n_jobs == 1:
+            for i in range(n_traces):
+                idx, y = _job(i)
+                out[idx] = y
+                ok[idx] = bool(np.isfinite(y).all())
+                steps[idx] = 1
+            return out, ok, steps
 
-    if n_jobs == 1:
-        for i in range(n_traces):
-            idx, y = _job(i)
-            out[idx] = y
-            ok[idx] = bool(np.isfinite(y).all())
-            steps[idx] = 1
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            futures = [ex.submit(_job, i) for i in range(n_traces)]
+            for fut in futures:
+                idx, y = fut.result()
+                out[idx] = y
+                ok[idx] = bool(np.isfinite(y).all())
+                steps[idx] = 1
+
         return out, ok, steps
 
-    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-        futures = [ex.submit(_job, i) for i in range(n_traces)]
-        for fut in futures:
-            idx, y = fut.result()
-            out[idx] = y
-            ok[idx] = bool(np.isfinite(y).all())
-            steps[idx] = 1
-
-    return out, ok, steps
+    raise ValueError(f"unsupported method: {cfg.method}")
