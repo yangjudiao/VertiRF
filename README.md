@@ -23,6 +23,29 @@ VertiRF 是一个独立开源项目，用于垂向接收函数流程中的 time-
 - AI-agent-callable JSON-RPC interface (`vertirf.agent.server`).
 - Engineering benchmark dataset builder and reproducible benchmark runner.
 
+## Real Decon Case | 实际反卷积案例
+
+English
+
+The following wiggle plot is generated from a real event case (`prompt19` convolved event NPZ source), using VertiRF optimized decon workflow. Left panel is observed seismograms, right panel is recovered RF.
+
+Chinese
+
+下图基于真实案例（`prompt19` 的事件卷积结果）由 VertiRF 优化反卷积流程生成。左图为观测地震记录，右图为反卷积恢复的接收函数（RF）。
+
+![VertiRF real decon case wiggle](assets/real_case_wiggle.png)
+
+Regenerate command:
+
+```bash
+python scripts/generate_real_case_wiggle.py \
+  --input-dir D:\works_2\seismic_data_retrieval_1\data\prompt19\p14_like_lowpass_t200\convolved_npz \
+  --stations 20 --component z \
+  --filter-type butterworth_bandpass --low-hz 0.1 --high-hz 0.8 \
+  --allow-negative-impulse \
+  --out assets/real_case_wiggle.png
+```
+
 ## Project Layout | 目录结构
 
 ```text
@@ -136,3 +159,4 @@ Pipeline includes:
 - [architecture.md](architecture.md): requirements and technical architecture.
 - [tasks.md](tasks.md): staged development tasks and acceptance criteria.
 - [AGENTS.md](AGENTS.md): AI agent execution rules for this project.
+
