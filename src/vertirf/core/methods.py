@@ -43,6 +43,7 @@ class MethodConfig:
     # Stack-specific options.
     stack_peak_window_start_sec: float = -2.0
     stack_peak_window_end_sec: float = 20.0
+    stack_zero_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -201,8 +202,17 @@ def _run_corr_rows_prompt22(
     return out, ok, steps
 
 
-def _stack_peak_window_indices(n: int, dt: float, t0: float, t1: float) -> np.ndarray:
-    t = (np.arange(n, dtype=np.float64) - 0.5 * (n - 1)) * float(dt)
+def _stack_peak_window_indices(
+    n: int,
+    dt: float,
+    t0: float,
+    t1: float,
+    zero_index: int | None,
+) -> np.ndarray:
+    if zero_index is None:
+        t = (np.arange(n, dtype=np.float64) - 0.5 * (n - 1)) * float(dt)
+    else:
+        t = (np.arange(n, dtype=np.float64) - float(int(zero_index))) * float(dt)
     mask = (t >= float(t0)) & (t <= float(t1))
     idx = np.where(mask)[0]
     if idx.size < 2:
@@ -210,19 +220,70 @@ def _stack_peak_window_indices(n: int, dt: float, t0: float, t1: float) -> np.nd
     return idx
 
 
-def _run_stack_single(obs: np.ndarray, cfg: MethodConfig, peak_idx: np.ndarray) -> np.ndarray:
-    x = apply_zero_phase_filter(np.asarray(obs, dtype=np.float64), cfg.dt, cfg.filter_spec)
+def _run_stack_single_prompt22(
+    observed_row: np.ndarray,
+    filter_response: np.ndarray,
+    n_samples: int,
+    peak_idx: np.ndarray,
+    target_index: int,
+) -> np.ndarray:
+    row = np.asarray(observed_row, dtype=np.float64)
+    xf = np.fft.rfft(row, n=n_samples)
+    x = np.fft.irfft(xf * filter_response, n=n_samples).real
+
     i = int(peak_idx[np.argmax(np.abs(x[peak_idx]))])
+    peak_amp = float(x[i])
 
-    sign = 1.0 if x[i] >= 0.0 else -1.0
-    y = x * sign
-
-    center = y.size // 2
-    shift = center - i
-    y = np.roll(y, shift)
-
+    y = np.roll(x, int(target_index - i))
+    if peak_amp < 0.0:
+        y = -y
     y, _ = normalize_max_abs(y)
     return y
+
+
+def _run_stack_rows_prompt22(
+    observed: np.ndarray,
+    cfg: MethodConfig,
+    jobs: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    arr = np.asarray(observed, dtype=np.float64)
+    n_traces, n_samples = arr.shape
+    out = np.zeros((n_traces, n_samples), dtype=np.float64)
+    ok = np.zeros((n_traces,), dtype=bool)
+    steps = np.ones((n_traces,), dtype=np.int32)
+
+    target_index = int(cfg.stack_zero_index) if cfg.stack_zero_index is not None else int(n_samples // 2)
+    if target_index < 0 or target_index >= n_samples:
+        raise ValueError(f"stack_zero_index out of range: {target_index} for n_samples={n_samples}")
+    peak_idx = _stack_peak_window_indices(
+        n=n_samples,
+        dt=cfg.dt,
+        t0=cfg.stack_peak_window_start_sec,
+        t1=cfg.stack_peak_window_end_sec,
+        zero_index=cfg.stack_zero_index,
+    )
+    filter_response = build_zero_phase_response(nfft=n_samples, dt=float(cfg.dt), spec=cfg.filter_spec)
+    n_jobs = max(1, int(jobs))
+
+    if n_jobs == 1 or n_traces < 2:
+        for i in range(n_traces):
+            y = _run_stack_single_prompt22(arr[i], filter_response, n_samples, peak_idx, target_index)
+            out[i] = y
+            ok[i] = bool(np.isfinite(y).all())
+        return out, ok, steps
+
+    def _job(i: int) -> tuple[int, np.ndarray]:
+        y = _run_stack_single_prompt22(arr[i], filter_response, n_samples, peak_idx, target_index)
+        return i, y
+
+    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+        futures = [ex.submit(_job, i) for i in range(n_traces)]
+        for fut in futures:
+            i, y = fut.result()
+            out[i] = y
+            ok[i] = bool(np.isfinite(y).all())
+
+    return out, ok, steps
 
 
 def run_batch_method(
@@ -244,11 +305,6 @@ def run_batch_method(
     if method == "decon":
         return run_batch_decon(arr, src, _to_decon_config(cfg), jobs=jobs)
 
-    n_traces, n_samples = arr.shape
-    out = np.zeros((n_traces, n_samples), dtype=np.float64)
-    ok = np.zeros((n_traces,), dtype=bool)
-    steps = np.zeros((n_traces,), dtype=np.int32)
-
     n_jobs = max(1, int(jobs))
 
     if method == "corr":
@@ -256,33 +312,6 @@ def run_batch_method(
         return _run_corr_rows_prompt22(arr, cfg, prepared, jobs=n_jobs)
 
     if method == "stack":
-        peak_idx = _stack_peak_window_indices(
-            n=src.size,
-            dt=cfg.dt,
-            t0=cfg.stack_peak_window_start_sec,
-            t1=cfg.stack_peak_window_end_sec,
-        )
-
-        def _job(i: int) -> tuple[int, np.ndarray]:
-            y = _run_stack_single(arr[i], cfg, peak_idx)
-            return i, y
-
-        if n_jobs == 1:
-            for i in range(n_traces):
-                idx, y = _job(i)
-                out[idx] = y
-                ok[idx] = bool(np.isfinite(y).all())
-                steps[idx] = 1
-            return out, ok, steps
-
-        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-            futures = [ex.submit(_job, i) for i in range(n_traces)]
-            for fut in futures:
-                idx, y = fut.result()
-                out[idx] = y
-                ok[idx] = bool(np.isfinite(y).all())
-                steps[idx] = 1
-
-        return out, ok, steps
+        return _run_stack_rows_prompt22(arr, cfg, jobs=n_jobs)
 
     raise ValueError(f"unsupported method: {cfg.method}")

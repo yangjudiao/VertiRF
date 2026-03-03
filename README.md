@@ -13,7 +13,7 @@ VertiRF 是一个独立开源工具包，面向垂向接收函数（VRF）流程
 - Three methods in one interface:
   - `decon`: prompt22-compatible time-iteration deconvolution (single fast engine, legacy-equivalent)
   - `corr`: prompt22-compatible spectral cross-correlation retrieval (single fast engine, legacy-equivalent)
-  - `stack`: peak-window aligned stacking with configurable peak window
+  - `stack`: prompt22-compatible peak-window aligned stacking with configurable peak window and optional zero-reference index
 - Zero-phase filter options:
   - `gaussian`
   - `butterworth_bandpass`
@@ -73,7 +73,8 @@ python -m vertirf.cli run-synthetic \
 python -m vertirf.cli run-synthetic \
   --method stack --mode optimized --jobs 4 \
   --stack-peak-window-start-sec -2 \
-  --stack-peak-window-end-sec 20
+  --stack-peak-window-end-sec 20 \
+  --stack-zero-index 200
 ```
 
 On this machine, `decon` is usually fastest with `--jobs 1` for smaller sample sizes and `--jobs 2` for larger sample sizes.
@@ -118,6 +119,21 @@ python scripts/benchmark_corr_legacy_equiv.py \
 This benchmark compares:
 - `legacy_reference`: prompt22-compatible corr retrieval loop
 - `optimized_single_engine`: current corr implementation
+
+and reports both numerical equivalence (`mae/max_abs/flatten_corrcoef`) and speedup.
+
+### Stack Legacy-Equivalence Benchmark
+
+```bash
+python scripts/benchmark_stack_legacy_equiv.py \
+  --out benchmark_stack_legacy_equiv_medium.json \
+  --traces 160 --samples 2001 --repeat 2 --jobs 4 \
+  --stack-peak-window-start-sec -10 --stack-peak-window-end-sec 40 --stack-zero-index 200
+```
+
+This benchmark compares:
+- `legacy_reference`: prompt22-compatible stack reference loop
+- `optimized_single_engine`: current vectorized stack implementation
 
 and reports both numerical equivalence (`mae/max_abs/flatten_corrcoef`) and speedup.
 

@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Stack-specific
     common.add_argument("--stack-peak-window-start-sec", type=float, default=-2.0)
     common.add_argument("--stack-peak-window-end-sec", type=float, default=20.0)
+    common.add_argument("--stack-zero-index", type=int, default=None)
 
     run_syn = sub.add_parser("run-synthetic", parents=[common], help="Run synthetic method batch")
     run_syn.add_argument("--traces", type=int, default=48)
@@ -115,6 +116,7 @@ def _build_method_cfg(args: argparse.Namespace) -> MethodConfig:
         corr_fft_switch_samples=int(args.corr_fft_switch_samples),
         stack_peak_window_start_sec=float(args.stack_peak_window_start_sec),
         stack_peak_window_end_sec=float(args.stack_peak_window_end_sec),
+        stack_zero_index=(None if args.stack_zero_index is None else int(args.stack_zero_index)),
     )
 
 

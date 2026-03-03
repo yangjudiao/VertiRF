@@ -104,3 +104,15 @@
   - Corr path is single implementation regardless of mode flag.
   - `tests/test_corr_stack.py` includes strict reference-equivalence checks and passes.
   - `scripts/benchmark_corr_legacy_equiv.py` generates JSON with consistency + speedup.
+
+## Phase 12: Prompt22-Compatible Stack Convergence + Equivalent Speedup
+
+- [x] Converge stack alignment reference to prompt22-compatible zero-reference index semantics (optional configurable field).
+- [x] Keep single stack engine in `core/methods.py` (no stack algorithm mode split).
+- [x] Refactor stack batch execution to vectorized filtering/alignment with stable parallel chunk dispatch.
+- [x] Add strict stack legacy-reference equivalence and stack serial-vs-parallel consistency tests.
+- [x] Add benchmark script for stack legacy-reference vs optimized-single-engine comparison.
+- Acceptance criteria:
+  - Stack path is single implementation regardless of mode flag.
+  - `tests/test_corr_stack.py` includes strict stack reference-equivalence and parallel consistency checks and passes.
+  - `scripts/benchmark_stack_legacy_equiv.py` generates JSON with consistency + speedup.

@@ -172,3 +172,61 @@
   - `python -m vertirf.agent.server --self-test` passed.
   - `python scripts/method_parallel_benchmark.py --out method_parallel_benchmark_summary.json` executed successfully, confirming decon/corr/stack parallel-call capability.
   - Commit and push: completed (see git log for commit hash).
+
+## Task: Stack Prompt22-Compatible Convergence + Equivalent Speedup
+
+## Step S1: Align Stack Semantics To Prompt22
+- Status: Completed (2026-03-04)
+- Actions:
+  - Converge stack peak-window alignment reference from implicit center-based indexing to prompt22-compatible zero-reference indexing (configurable).
+  - Keep single stack engine in `core/methods.py`; no alternate stack algorithm branches.
+  - Wire optional stack zero-reference index through CLI/agent config.
+- Acceptance Criteria (AC):
+  - AC-S1.1: Stack output can exactly match prompt22 stack reference semantics when zero-reference index is provided.
+  - AC-S1.2: Existing stack call sites without zero-reference index keep backward-compatible behavior.
+- Execution Result:
+  - `MethodConfig` 新增 `stack_zero_index`（可选）。
+  - `core/methods.py` 的 stack 路径已对齐 prompt22 语义：
+    - 峰值窗口按 `(sample_index - stack_zero_index) * dt` 解释（`stack_zero_index` 为空时保持原中心参考语义）。
+    - 对齐目标索引由 `stack_zero_index` 控制（默认回退到 `n//2`，兼容旧调用）。
+  - CLI/agent 参数打通：
+    - `src/vertirf/cli.py` 新增 `--stack-zero-index`
+    - `src/vertirf/agent/server.py` 新增 `stack_zero_index` 参数解析
+  - 真实数据 stack-only 全量对比（185 events）结果：
+    - `0.1-0.5`: `verdict=一致`, `mae=3.82e-10`, `max_abs=1.30e-08`
+    - `0.1-0.35`: `verdict=一致`, `mae=3.96e-10`, `max_abs=1.44e-08`
+    - 报告：`D:/works_2/seismic_data_retrieval_1/data/prompt22_real_vertirf_stackonly_parallel_20260304/stack_only_comparison_report.json`
+
+## Step S2: Optimize Stack Efficiency and Parallel Throughput
+- Status: Completed (2026-03-04)
+- Actions:
+  - Replace per-trace stack loop with batch-vectorized filter + peak detect + shift path.
+  - Keep `jobs` parallel-call capability via chunked processing and stable output ordering.
+  - Add strict legacy-equivalence + serial/parallel consistency tests.
+- Acceptance Criteria (AC):
+  - AC-S2.1: `tests/test_corr_stack.py` includes stack strict-equivalence and serial-vs-parallel checks.
+  - AC-S2.2: stack benchmark reports `speedup_vs_legacy > 1.0x` with near-machine-precision consistency.
+- Execution Result:
+  - stack 核心实现优化：
+    - 预计算滤波响应（每批一次），避免旧实现“每条 trace 重建一次频响”的重复开销。
+    - 保留 `jobs` 并行调用能力；串并输出保持一致。
+  - 测试增强（`tests/test_corr_stack.py`）：
+    - 新增 `stack` 严格 legacy 等价测试（含 `stack_zero_index`）
+    - 新增 `stack` 串并一致性严格测试
+  - 新增基准脚本：
+    - `scripts/benchmark_stack_legacy_equiv.py`
+  - 基准结果：
+    - `benchmark_stack_legacy_equiv_medium.json`: `speedup_vs_legacy=5.2763x`
+    - `benchmark_stack_legacy_equiv_large.json`: `speedup_vs_legacy=7.7951x`
+    - 一致性均为机器精度级等价（`mae=0`, `max_abs=0`, `flatten_corrcoef≈1.0`）
+
+## Step S3: Gates, Real-data Full Stack Validation, GitHub Push
+- Status: In Progress (2026-03-04)
+- Actions:
+  - Run lint/tests/parallel benchmark/agent self-test.
+  - Run real-data stack-only full validation against prompt22 reference bands.
+  - Commit and push as the single canonical stack implementation.
+- Acceptance Criteria (AC):
+  - AC-S3.1: validation gates pass.
+  - AC-S3.2: real-data 185-event stack comparison verdict is `一致` for both bands.
+  - AC-S3.3: remote branch includes the new commit.

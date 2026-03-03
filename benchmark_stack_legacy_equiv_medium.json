@@ -1,0 +1,42 @@
+{
+  "benchmark": {
+    "traces": 160,
+    "samples": 2001,
+    "dt": 0.05,
+    "repeat": 3,
+    "jobs": 4,
+    "seed": 19,
+    "noise_std": 0.015,
+    "stack_peak_window_start_sec": -10.0,
+    "stack_peak_window_end_sec": 40.0,
+    "stack_zero_index": 200
+  },
+  "legacy_reference": {
+    "elapsed_sec": [
+      0.1120929000317119,
+      0.1169139999547042,
+      0.10694409999996424
+    ],
+    "elapsed_sec_mean": 0.11198366666212678,
+    "success_count": 160,
+    "mean_steps": 1.0
+  },
+  "optimized_single_engine": {
+    "elapsed_sec": [
+      0.02334110002266243,
+      0.018932799983303994,
+      0.02139760000864044
+    ],
+    "elapsed_sec_mean": 0.021223833338202287,
+    "success_count": 160,
+    "mean_steps": 1.0
+  },
+  "consistency": {
+    "mae": 0.0,
+    "max_abs": 0.0,
+    "rmse": 0.0,
+    "flatten_corrcoef": 1.0,
+    "trace_count": 160
+  },
+  "speedup_vs_legacy": 5.27631671798701
+}

@@ -22,6 +22,8 @@ def _build_cfg(params: dict[str, Any]) -> tuple[MethodConfig, str, int, int, int
         transition_hz=float(params.get("transition_hz", 0.05)),
         tukey_alpha=float(params.get("tukey_alpha", 0.3)),
     )
+    stack_zero_index_raw = params.get("stack_zero_index", None)
+    stack_zero_index = None if stack_zero_index_raw is None else int(stack_zero_index_raw)
     cfg = MethodConfig(
         method=str(params.get("method", "decon")),
         dt=float(params.get("dt", 0.05)),
@@ -42,6 +44,7 @@ def _build_cfg(params: dict[str, Any]) -> tuple[MethodConfig, str, int, int, int
         corr_fft_switch_samples=int(params.get("corr_fft_switch_samples", 8192)),
         stack_peak_window_start_sec=float(params.get("stack_peak_window_start_sec", -2.0)),
         stack_peak_window_end_sec=float(params.get("stack_peak_window_end_sec", 20.0)),
+        stack_zero_index=stack_zero_index,
     )
     mode = str(params.get("mode", "optimized"))
     traces = int(params.get("traces", 32))
