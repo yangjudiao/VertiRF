@@ -1,0 +1,32 @@
+{
+  "event_file": "D:\\works_2\\seismic_data_retrieval_1\\data\\prompt19\\p14_like_lowpass_t200\\convolved_npz\\20070920T083114_query_eventid_2600161.npz",
+  "event_id": "20070920T083114_query_eventid_2600161",
+  "component": "z",
+  "stations_used": 20,
+  "time_window_sec": [
+    -10.0,
+    90.0
+  ],
+  "filter_type": "butterworth_bandpass",
+  "corr_smoothing_bandwidth_hz": 0.25,
+  "stack_peak_window_sec": [
+    -2.0,
+    20.0
+  ],
+  "jobs": 4,
+  "method_status": {
+    "decon": {
+      "success_count": 20,
+      "mean_steps": 74.85
+    },
+    "corr": {
+      "success_count": 20,
+      "mean_steps": 1.0
+    },
+    "stack": {
+      "success_count": 20,
+      "mean_steps": 1.0
+    }
+  },
+  "output_png": "assets\\real_case_three_methods_wiggle.png"
+}

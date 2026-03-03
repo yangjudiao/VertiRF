@@ -45,25 +45,31 @@ def main() -> int:
         print("PING RESPONSE")
         print(json.dumps(ping_resp, indent=2))
 
-        run_resp = request(
-            proc,
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "run_decon_synthetic",
-                "params": {
-                    "mode": "optimized",
-                    "filter_type": "tukey_bandpass",
-                    "allow_negative_impulse": True,
-                    "traces": 10,
-                    "samples": 512,
-                    "jobs": 2,
-                    "itmax": 200,
+        for rid, method_name in [(2, "decon"), (3, "corr"), (4, "stack")]:
+            run_resp = request(
+                proc,
+                {
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "method": "run_method_synthetic",
+                    "params": {
+                        "method": method_name,
+                        "mode": "optimized",
+                        "filter_type": "butterworth_bandpass",
+                        "allow_negative_impulse": True,
+                        "traces": 8,
+                        "samples": 512,
+                        "jobs": 2,
+                        "itmax": 200,
+                        "corr_smoothing_bandwidth_hz": 0.25,
+                        "corr_post_filter_type": "gaussian",
+                        "stack_peak_window_start_sec": -2,
+                        "stack_peak_window_end_sec": 20,
+                    },
                 },
-            },
-        )
-        print("RUN RESPONSE")
-        print(json.dumps(run_resp, indent=2))
+            )
+            print(f"RUN RESPONSE [{method_name}]")
+            print(json.dumps(run_resp, indent=2))
     finally:
         proc.terminate()
         try:

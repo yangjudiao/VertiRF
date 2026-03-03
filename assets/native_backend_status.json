@@ -1,0 +1,24 @@
+{
+  "platform": {
+    "system": "Windows",
+    "release": "11",
+    "python": "3.12.10"
+  },
+  "toolchain": {
+    "cl": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.EXE",
+    "g++": null,
+    "gcc": null,
+    "cmake": null
+  },
+  "native_backend_available": true,
+  "target_language": "C/C++",
+  "build_attempted": true,
+  "build_succeeded": true,
+  "action": "native_corr_backend_built",
+  "notes": [
+    "build_native_corr_backend.py executed",
+    "returncode=0",
+    "\"toolchain\": {\n    \"cl\": \"C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.44.35207\\\\bin\\\\Hostx64\\\\x64\\\\cl.EXE\",\n    \"g++\": null,\n    \"gcc\": null,\n    \"cmake\": null\n  },\n  \"build_attempted\": true,\n  \"build_succeeded\": true,\n  \"dll_path\": \"src\\\\vertirf\\\\native\\\\vertirf_native_corr.dll\",\n  \"message\": \"native corr backend DLL built\",\n  \"returncode\": 0,\n  \"stdout_tail\": \"corr_kernel.cpp\\r\\n  \\u6b63\\u5728\\u521b\\u5efa\\u5e93 src\\\\vertirf\\\\native\\\\vertirf_native_corr.lib \\u548c\\u5bf9\\u8c61 src\\\\vertirf\\\\native\\\\vertirf_native_corr.exp\\r\\n\",\n  \"stderr_tail\": \"\"\n}\n",
+    "Runtime fallback remains optimized NumPy + parallel threads"
+  ]
+}

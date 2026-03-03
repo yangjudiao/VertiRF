@@ -34,8 +34,14 @@ jobs:
         run: |
           python scripts/benchmark.py --out benchmark_summary.json --traces 24 --samples 512 --repeat 1 --jobs 2 --min-speedup 1.0
 
+      - name: Method Parallel Benchmark Smoke
+        run: |
+          python scripts/method_parallel_benchmark.py --out method_parallel_benchmark_summary.json --traces 24 --samples 512 --repeat 1 --jobs 2
+
       - name: Upload Benchmark Artifact
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-summary
-          path: benchmark_summary.json
+          path: |
+            benchmark_summary.json
+            method_parallel_benchmark_summary.json

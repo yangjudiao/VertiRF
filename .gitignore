@@ -8,8 +8,16 @@ __pycache__/
 venv/
 benchmark_summary.json
 benchmark_smoke_ci.json
+method_parallel_benchmark_summary.json
+method_parallel_benchmark_summary_large.json
 output_run_synthetic.json
+output_*_run.json
 test_report.txt
+corr_kernel.obj
+
+src/vertirf/native/*.dll
+src/vertirf/native/*.lib
+src/vertirf/native/*.exp
 
 data/engineering_benchmark/*.npz
 data/engineering_benchmark/*.json

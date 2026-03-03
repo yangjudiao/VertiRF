@@ -7,12 +7,12 @@ from typing import Any
 
 import numpy as np
 
-from vertirf.core.decon import DeconConfig, run_batch_decon
+from vertirf.core.methods import MethodConfig, run_batch_method
 from vertirf.filters.zero_phase import FilterSpec
 from vertirf.waveform.synthetic import make_synthetic_batch
 
 
-def _build_cfg(params: dict[str, Any]) -> tuple[DeconConfig, str, int, int, int, float]:
+def _build_cfg(params: dict[str, Any]) -> tuple[MethodConfig, str, int, int, int, float]:
     filter_spec = FilterSpec(
         filter_type=str(params.get("filter_type", "gaussian")),
         gauss_f0=float(params.get("gauss_f0", np.pi)),
@@ -22,13 +22,22 @@ def _build_cfg(params: dict[str, Any]) -> tuple[DeconConfig, str, int, int, int,
         transition_hz=float(params.get("transition_hz", 0.05)),
         tukey_alpha=float(params.get("tukey_alpha", 0.3)),
     )
-    cfg = DeconConfig(
+    cfg = MethodConfig(
+        method=str(params.get("method", "decon")),
         dt=float(params.get("dt", 0.05)),
         tshift_sec=float(params.get("tshift_sec", 0.0)),
         itmax=int(params.get("itmax", 400)),
         minderr=float(params.get("minderr", 1e-3)),
         allow_negative_impulse=bool(params.get("allow_negative_impulse", False)),
         filter_spec=filter_spec,
+        corr_smoothing_bandwidth_hz=float(params.get("corr_smoothing_bandwidth_hz", 0.35)),
+        corr_post_filter_type=str(params.get("corr_post_filter_type", "none")),
+        corr_post_gauss_f0=float(params.get("corr_post_gauss_f0", np.pi)),
+        corr_post_low_hz=float(params.get("corr_post_low_hz", 0.1)),
+        corr_post_high_hz=float(params.get("corr_post_high_hz", 0.8)),
+        corr_post_corners=int(params.get("corr_post_corners", 4)),
+        stack_peak_window_start_sec=float(params.get("stack_peak_window_start_sec", -2.0)),
+        stack_peak_window_end_sec=float(params.get("stack_peak_window_end_sec", 20.0)),
     )
     mode = str(params.get("mode", "optimized"))
     traces = int(params.get("traces", 32))
@@ -48,15 +57,16 @@ def _run_synthetic(params: dict[str, Any]) -> dict[str, Any]:
         noise_std=noise_std,
         rng_seed=int(params.get("seed", 0)),
     )
-    rec, ok, iters = run_batch_decon(obs, src, cfg, mode=mode, jobs=jobs)
+    rec, ok, steps = run_batch_method(obs, src, cfg, mode=mode, jobs=jobs)
     return {
+        "method": cfg.method,
         "mode": mode,
         "traces": traces,
         "samples": samples,
         "jobs": jobs,
         "success_count": int(np.count_nonzero(ok)),
         "success_rate": float(np.mean(ok.astype(np.float64))),
-        "mean_iterations": float(np.mean(iters.astype(np.float64))),
+        "mean_steps": float(np.mean(steps.astype(np.float64))),
         "mean_abs_error": float(np.mean(np.abs(rec - truth))),
     }
 
@@ -66,6 +76,8 @@ def dispatch(method: str, params: dict[str, Any] | None = None) -> dict[str, Any
     if method == "ping":
         return {"pong": True, "service": "vertirf-agent"}
     if method == "run_decon_synthetic":
+        return _run_synthetic({**p, "method": "decon"})
+    if method == "run_method_synthetic":
         return _run_synthetic(p)
     raise ValueError(f"unknown method: {method}")
 
@@ -95,9 +107,10 @@ def _rpc_loop() -> int:
 
 def _self_test() -> int:
     ping = dispatch("ping", {})
-    run = dispatch(
-        "run_decon_synthetic",
+    run_decon = dispatch(
+        "run_method_synthetic",
         {
+            "method": "decon",
             "mode": "optimized",
             "filter_type": "butterworth_bandpass",
             "allow_negative_impulse": True,
@@ -107,8 +120,48 @@ def _self_test() -> int:
             "itmax": 200,
         },
     )
-    ok = bool(ping.get("pong")) and run.get("success_count", 0) > 0
-    out = {"self_test_passed": ok, "ping": ping, "run": run}
+    run_corr = dispatch(
+        "run_method_synthetic",
+        {
+            "method": "corr",
+            "mode": "optimized",
+            "filter_type": "butterworth_bandpass",
+            "corr_smoothing_bandwidth_hz": 0.25,
+            "corr_post_filter_type": "gaussian",
+            "traces": 8,
+            "samples": 512,
+            "jobs": 2,
+            "itmax": 120,
+        },
+    )
+    run_stack = dispatch(
+        "run_method_synthetic",
+        {
+            "method": "stack",
+            "mode": "optimized",
+            "filter_type": "butterworth_bandpass",
+            "stack_peak_window_start_sec": -2,
+            "stack_peak_window_end_sec": 20,
+            "traces": 8,
+            "samples": 512,
+            "jobs": 2,
+            "itmax": 120,
+        },
+    )
+
+    ok = bool(ping.get("pong")) and min(
+        run_decon.get("success_count", 0),
+        run_corr.get("success_count", 0),
+        run_stack.get("success_count", 0),
+    ) > 0
+
+    out = {
+        "self_test_passed": ok,
+        "ping": ping,
+        "run_decon": run_decon,
+        "run_corr": run_corr,
+        "run_stack": run_stack,
+    }
     print(json.dumps(out, indent=2))
     return 0 if ok else 2
 

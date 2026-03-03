@@ -2,49 +2,26 @@
 
 English
 
-VertiRF is a standalone open-source project for time-iteration deconvolution in vertical receiver function workflows. It keeps a reproducible baseline implementation and provides an optimized execution path with zero-phase filter extensibility and batch parallelism.
+VertiRF is a standalone open-source toolkit for vertical receiver-function workflows. It supports three VRF methods (`decon`, `corr`, `stack`) with both serial and parallel execution paths.
 
 Chinese
 
-VertiRF 是一个独立开源项目，用于垂向接收函数流程中的 time-iteration 反卷积。项目同时保留可复现的 baseline 实现，并提供优化执行路径，支持多种零相位滤波器与批量并行。
+VertiRF 是一个独立开源工具包，面向垂向接收函数（VRF）流程。当前支持三种方法（`decon`、`corr`、`stack`），并提供串行与并行两种执行路径。
 
 ## Features | 功能特性
 
-- Baseline time-iteration decon implementation compatible with existing Gaussian workflow.
-- Optimized batch mode with reusable FFT preparation and thread-level parallel execution.
+- Three methods in one interface:
+  - `decon`: time-iteration deconvolution
+  - `corr`: cross-correlation retrieval with configurable smoothing and post-filter
+  - `stack`: peak-window aligned stacking with configurable peak window
 - Zero-phase filter options:
   - `gaussian`
   - `butterworth_bandpass`
   - `raised_cosine_bandpass`
   - `tukey_bandpass`
-- Configurable impulse picking behavior:
-  - `allow_negative_impulse=true`: full-lag search
-  - `allow_negative_impulse=false`: non-negative lag only
+- Parallel batch execution (`--jobs`) for all methods.
 - AI-agent-callable JSON-RPC interface (`vertirf.agent.server`).
-- Engineering benchmark dataset builder and reproducible benchmark runner.
-
-## Real Decon Case | 实际反卷积案例
-
-English
-
-The following wiggle plot is generated from a real event case (`prompt19` convolved event NPZ source), using VertiRF optimized decon workflow. Left panel is observed seismograms, right panel is recovered RF (display gain + smoothing for visualization).
-
-Chinese
-
-下图基于真实案例（`prompt19` 的事件卷积结果）由 VertiRF 优化反卷积流程生成。左图为观测地震记录，右图为反卷积恢复的接收函数（RF，展示时做了增益与轻微平滑，仅用于可视化）。
-
-![VertiRF real decon case wiggle](assets/real_case_wiggle.png)
-
-Regenerate command (default window extended to 90s):
-```bash
-python scripts/generate_real_case_wiggle.py \
-  --input-dir D:\works_2\seismic_data_retrieval_1\data\prompt19\p14_like_lowpass_t200\convolved_npz \
-  --stations 20 --component z \
-  --filter-type butterworth_bandpass --low-hz 0.1 --high-hz 0.8 \
-  --allow-negative-impulse --time-end-sec 90 \
-  --rf-display-gain 12 --rf-smooth-samples 9 \
-  --out assets/real_case_wiggle.png
-```
+- Engineering dataset/repro benchmark utilities.
 
 ## Project Layout | 目录结构
 
@@ -56,6 +33,8 @@ VertiRF/
     waveform/
     filters/
     core/
+      decon.py
+      methods.py
     agent/
     cli.py
   tests/
@@ -72,54 +51,78 @@ VertiRF/
 
 ```bash
 cd D:\works_2\VertiRF
-python -m pip install -e .
+python -m pip install -e .[dev]
 ```
 
-Run synthetic batch decon (optimized):
+### Run Decon / Corr / Stack
 
 ```bash
+# decon
+python -m vertirf.cli run-synthetic --method decon --mode optimized --jobs 4
+
+# corr (smoothing + post-filter selectable)
 python -m vertirf.cli run-synthetic \
-  --mode optimized \
-  --filter-type butterworth_bandpass \
-  --low-hz 0.1 --high-hz 0.8 \
-  --allow-negative-impulse true \
-  --jobs 4 \
-  --traces 64 --samples 1024
+  --method corr --mode optimized --jobs 4 \
+  --corr-smoothing-bandwidth-hz 0.25 \
+  --corr-post-filter-type gaussian
+
+# stack (peak window selectable)
+python -m vertirf.cli run-synthetic \
+  --method stack --mode optimized --jobs 4 \
+  --stack-peak-window-start-sec -2 \
+  --stack-peak-window-end-sec 20
 ```
 
-Run benchmark:
+### Method Parallel Benchmark
 
 ```bash
-python scripts/benchmark.py --out benchmark_summary.json --jobs 4
+python scripts/method_parallel_benchmark.py \
+  --out method_parallel_benchmark_summary.json \
+  --traces 96 --samples 1024 --repeat 2 --jobs 4
 ```
 
-Run tests:
+### Native Backend Status (C/C++)
 
 ```bash
-python -m pytest -q
+python scripts/check_native_backend.py --out assets/native_backend_status.json
 ```
 
-Run style check:
+## Real Case Figures | 真实案例图
+
+### Real Decon Case | 单方法 decon 案例
+
+![VertiRF real decon case wiggle](assets/real_case_wiggle.png)
+
+### Three Methods on One Real Case | 同一真实案例的三方法对比
+
+English
+
+The following figure shows `decon/corr/stack` results for the same real event case.
+
+Chinese
+
+下图展示同一真实事件案例下 `decon/corr/stack` 三种方法的结果对比。
+
+![VertiRF three methods real case](assets/real_case_three_methods_wiggle.png)
+
+Regenerate command:
 
 ```bash
-ruff check src tests scripts examples
-```
-
-Agent self-test:
-
-```bash
-python -m vertirf.agent.server --self-test
+python scripts/generate_real_case_three_methods_wiggle.py \
+  --input-dir D:\works_2\seismic_data_retrieval_1\data\prompt19\p14_like_lowpass_t200\convolved_npz \
+  --stations 20 --component z \
+  --filter-type butterworth_bandpass --low-hz 0.1 --high-hz 0.8 \
+  --corr-smoothing-bandwidth-hz 0.25 --corr-post-filter-type gaussian \
+  --stack-peak-window-start-sec -2 --stack-peak-window-end-sec 20 \
+  --allow-negative-impulse --time-end-sec 90 \
+  --out assets/real_case_three_methods_wiggle.png
 ```
 
 ## MCP Client Example | MCP 客户端示例
 
-Minimal JSON-RPC client example:
-
 ```bash
 python examples/mcp_client_example.py
 ```
-
-This script starts `vertirf.agent.server`, sends `ping` and `run_decon_synthetic` requests, and prints responses.
 
 ## Engineering Benchmark Dataset | 工程基准数据集
 
@@ -138,7 +141,7 @@ Run reproducible engineering benchmark:
 python scripts/run_engineering_repro.py \
   --dataset data/engineering_benchmark/engineering_dataset.npz \
   --out data/engineering_benchmark/repro_report.json \
-  --jobs 4 --repeat 2 --filter-type butterworth_bandpass --allow-negative-impulse
+  --jobs 4 --repeat 1 --filter-type butterworth_bandpass --allow-negative-impulse
 ```
 
 ## CI | 持续集成
@@ -148,7 +151,8 @@ GitHub Actions workflow: `.github/workflows/ci.yml`
 Pipeline includes:
 - `ruff` style check
 - `pytest`
-- benchmark smoke run and artifact upload (`benchmark_summary.json`)
+- decon benchmark smoke
+- method parallel benchmark smoke
 
 ## Pipeline Overview | 流程示意
 
@@ -159,5 +163,3 @@ Pipeline includes:
 - [architecture.md](architecture.md): requirements and technical architecture.
 - [tasks.md](tasks.md): staged development tasks and acceptance criteria.
 - [AGENTS.md](AGENTS.md): AI agent execution rules for this project.
-
-
