@@ -221,7 +221,7 @@
     - 一致性均为机器精度级等价（`mae=0`, `max_abs=0`, `flatten_corrcoef≈1.0`）
 
 ## Step S3: Gates, Real-data Full Stack Validation, GitHub Push
-- Status: In Progress (2026-03-04)
+- Status: Completed (2026-03-04)
 - Actions:
   - Run lint/tests/parallel benchmark/agent self-test.
   - Run real-data stack-only full validation against prompt22 reference bands.
@@ -238,6 +238,7 @@
     - `python -m vertirf.agent.server --self-test`
   - 本地提交已完成：
     - `86749c7 stack: align prompt22 semantics and optimize single-engine path`
+    - `b1d96a4 docs: record stack gates and push retry status`
   - 远端推送状态：
-    - 连续 3 次 `git push origin main` 失败（网络连接 GitHub:443 失败，`connection reset / could not connect to server`）。
-    - 当前为“已本地提交、待网络恢复后推送”。
+    - 初次推送出现网络抖动（`connection reset / could not connect to server`），重试后已成功推送到 `origin/main`。
+    - 远端范围：`2f4d145..b1d96a4`。
