@@ -27,22 +27,22 @@ VertiRF 是一个独立开源项目，用于垂向接收函数流程中的 time-
 
 English
 
-The following wiggle plot is generated from a real event case (`prompt19` convolved event NPZ source), using VertiRF optimized decon workflow. Left panel is observed seismograms, right panel is recovered RF.
+The following wiggle plot is generated from a real event case (`prompt19` convolved event NPZ source), using VertiRF optimized decon workflow. Left panel is observed seismograms, right panel is recovered RF (display gain + smoothing for visualization).
 
 Chinese
 
-下图基于真实案例（`prompt19` 的事件卷积结果）由 VertiRF 优化反卷积流程生成。左图为观测地震记录，右图为反卷积恢复的接收函数（RF）。
+下图基于真实案例（`prompt19` 的事件卷积结果）由 VertiRF 优化反卷积流程生成。左图为观测地震记录，右图为反卷积恢复的接收函数（RF，展示时做了增益与轻微平滑，仅用于可视化）。
 
 ![VertiRF real decon case wiggle](assets/real_case_wiggle.png)
 
-Regenerate command:
-
+Regenerate command (default window extended to 90s):
 ```bash
 python scripts/generate_real_case_wiggle.py \
   --input-dir D:\works_2\seismic_data_retrieval_1\data\prompt19\p14_like_lowpass_t200\convolved_npz \
   --stations 20 --component z \
   --filter-type butterworth_bandpass --low-hz 0.1 --high-hz 0.8 \
-  --allow-negative-impulse \
+  --allow-negative-impulse --time-end-sec 90 \
+  --rf-display-gain 12 --rf-smooth-samples 9 \
   --out assets/real_case_wiggle.png
 ```
 
@@ -159,4 +159,5 @@ Pipeline includes:
 - [architecture.md](architecture.md): requirements and technical architecture.
 - [tasks.md](tasks.md): staged development tasks and acceptance criteria.
 - [AGENTS.md](AGENTS.md): AI agent execution rules for this project.
+
 

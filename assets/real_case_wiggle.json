@@ -5,14 +5,18 @@
   "stations_used": 20,
   "time_window_sec": [
     -10.0,
-    40.0
+    90.0
   ],
   "filter_type": "butterworth_bandpass",
   "allow_negative_impulse": true,
   "itmax": 260,
   "minderr": 0.001,
   "jobs": 4,
+  "rf_display_gain": 12.0,
+  "rf_smooth_samples": 9,
   "success_count": 20,
   "mean_iterations": 74.85,
+  "rf_peak_time_sec_min": 58.219058990478516,
+  "rf_peak_time_sec_max": 71.72893524169922,
   "output_png": "assets\\real_case_wiggle.png"
 }

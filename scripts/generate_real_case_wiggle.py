@@ -15,7 +15,9 @@ from vertirf.filters.zero_phase import FilterSpec
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Generate real-case wiggle plot for VertiRF project intro")
+    p = argparse.ArgumentParser(
+        description="Generate real-case wiggle plot for VertiRF project intro"
+    )
     p.add_argument(
         "--input-dir",
         default=r"D:\works_2\seismic_data_retrieval_1\data\prompt19\p14_like_lowpass_t200\convolved_npz",
@@ -24,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--component", choices=["z", "r"], default="z")
     p.add_argument("--stations", type=int, default=20)
     p.add_argument("--time-start-sec", type=float, default=-10.0)
-    p.add_argument("--time-end-sec", type=float, default=40.0)
+    p.add_argument("--time-end-sec", type=float, default=90.0)
     p.add_argument("--itmax", type=int, default=260)
     p.add_argument("--minderr", type=float, default=1e-3)
     p.add_argument("--jobs", type=int, default=4)
@@ -33,6 +35,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--high-hz", type=float, default=0.8)
     p.add_argument("--corners", type=int, default=4)
     p.add_argument("--allow-negative-impulse", action="store_true")
+    p.add_argument(
+        "--rf-display-gain",
+        type=float,
+        default=12.0,
+        help="Display gain for recovered RF panel only",
+    )
+    p.add_argument(
+        "--rf-smooth-samples",
+        type=int,
+        default=9,
+        help="Odd moving-average length for RF display only (0/1 disables)",
+    )
     p.add_argument("--out", default="assets/real_case_wiggle.png")
     p.add_argument("--meta-out", default="assets/real_case_wiggle.json")
     p.add_argument("--dpi", type=int, default=180)
@@ -65,20 +79,47 @@ def _normalize_rows(x: np.ndarray) -> np.ndarray:
     return arr / den
 
 
-def _plot_wiggle(ax: plt.Axes, mat: np.ndarray, t: np.ndarray, labels: list[str], title: str, color: str) -> None:
+def _smooth_rows(x: np.ndarray, win: int) -> np.ndarray:
+    arr = np.asarray(x, dtype=np.float64)
+    w = int(win)
+    if w <= 1:
+        return arr
+    if w % 2 == 0:
+        w += 1
+    ker = np.ones((w,), dtype=np.float64) / float(w)
+    out = np.zeros_like(arr)
+    for i in range(arr.shape[0]):
+        out[i] = np.convolve(arr[i], ker, mode="same")
+    return out
+
+
+def _plot_wiggle(
+    ax: plt.Axes,
+    mat: np.ndarray,
+    t: np.ndarray,
+    labels: list[str],
+    title: str,
+    color: str,
+    gain: float,
+) -> None:
     n = mat.shape[0]
     spacing = 1.6
+    disp = np.asarray(mat, dtype=np.float64) * float(gain)
+
     for i in range(n):
-        ax.plot(t, mat[i] + i * spacing, color=color, lw=0.7)
+        y0 = i * spacing
+        y = disp[i] + y0
+        ax.plot(t, y, color=color, lw=0.7)
         ax.fill_between(
             t,
-            i * spacing,
-            mat[i] + i * spacing,
-            where=(mat[i] + i * spacing) >= (i * spacing),
+            y0,
+            y,
+            where=y >= y0,
             color=color,
             alpha=0.12,
             linewidth=0,
         )
+
     tick_idx = np.arange(0, n, max(1, n // 6), dtype=int)
     ax.set_yticks(tick_idx * spacing)
     ax.set_yticklabels([labels[i] for i in tick_idx], fontsize=8)
@@ -103,9 +144,7 @@ def main() -> int:
         source = np.asarray(d["wavelet_amp"], dtype=np.float64)
         dt = float(d["dt_sec"]) if "dt_sec" in d else float(np.median(np.diff(time_sec)))
 
-    n_samples = source.size
-    if comp.shape[0] < n_samples:
-        n_samples = comp.shape[0]
+    n_samples = min(source.size, comp.shape[0])
     source = source[:n_samples]
     source = source / (np.max(np.abs(source)) + 1e-12)
 
@@ -139,24 +178,53 @@ def main() -> int:
         mode="optimized",
         jobs=max(1, int(args.jobs)),
     )
+
     recovered = _normalize_rows(recovered)
+    recovered_disp = _smooth_rows(recovered, int(args.rf_smooth_samples))
+    recovered_disp = _normalize_rows(recovered_disp)
 
     t_rel = time_sec[:n_samples][idx_t]
     obs_plot = observed[:, idx_t]
-    rec_plot = recovered[:, idx_t]
+    rec_plot = recovered_disp[:, idx_t]
     labels = [str(station_codes[i]) for i in station_idx]
 
-    fig, axes = plt.subplots(1, 2, figsize=(14.5, 8.0), dpi=max(100, int(args.dpi)), sharex=True)
-    _plot_wiggle(axes[0], obs_plot, t_rel, labels, "Observed Seismograms (Real Case)", "#1d4ed8")
-    _plot_wiggle(axes[1], rec_plot, t_rel, labels, "Recovered RF by VertiRF Decon", "#0f766e")
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(15.0, 8.2),
+        dpi=max(100, int(args.dpi)),
+        sharex=True,
+    )
+    _plot_wiggle(
+        axes[0],
+        obs_plot,
+        t_rel,
+        labels,
+        "Observed Seismograms (Real Case)",
+        "#1d4ed8",
+        gain=1.0,
+    )
+    _plot_wiggle(
+        axes[1],
+        rec_plot,
+        t_rel,
+        labels,
+        f"Recovered RF by VertiRF Decon (display gain x{float(args.rf_display_gain):g})",
+        "#0f766e",
+        gain=float(args.rf_display_gain),
+    )
 
     for ax in axes:
         ax.axvline(0.0, color="#111827", ls="--", lw=1.0)
         ax.set_xlabel("Time (s)")
 
     fig.suptitle(
-        f"VertiRF Real Decon Case | event={event_id} | stations={n_stations} | filter={args.filter_type}",
-        fontsize=11,
+        (
+            "VertiRF Real Decon Case | "
+            f"event={event_id} | stations={n_stations} | filter={args.filter_type} | "
+            f"window=[{float(args.time_start_sec):g}, {float(args.time_end_sec):g}]s"
+        ),
+        fontsize=10.8,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -164,6 +232,10 @@ def main() -> int:
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png)
     plt.close(fig)
+
+    # Extract peak time distribution for visibility diagnostics.
+    rec_peaks_idx = np.argmax(np.abs(recovered), axis=1)
+    rec_peak_times = time_sec[:n_samples][rec_peaks_idx]
 
     meta = {
         "event_file": str(event_file),
@@ -176,8 +248,12 @@ def main() -> int:
         "itmax": int(args.itmax),
         "minderr": float(args.minderr),
         "jobs": int(args.jobs),
+        "rf_display_gain": float(args.rf_display_gain),
+        "rf_smooth_samples": int(args.rf_smooth_samples),
         "success_count": int(np.count_nonzero(ok)),
         "mean_iterations": float(np.mean(iters.astype(np.float64))),
+        "rf_peak_time_sec_min": float(np.min(rec_peak_times)),
+        "rf_peak_time_sec_max": float(np.max(rec_peak_times)),
         "output_png": str(out_png),
     }
 
