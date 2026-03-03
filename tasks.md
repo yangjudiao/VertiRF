@@ -81,3 +81,14 @@
 - Acceptance criteria:
   - `engineering_dataset.npz` is generated with metadata summary.
   - `repro_report.json` includes runtime speedup and serial/parallel consistency.
+
+## Phase 10: Prompt22-Compatible Decon Convergence + Equivalent Speedup
+
+- [x] Converge decon semantics to prompt22-compatible behavior while keeping single-engine architecture.
+- [x] Keep equivalent-only optimizations (precomputed FFT terms + incremental residual update).
+- [x] Add strict decon legacy-reference equivalence tests.
+- [x] Add benchmark script for legacy-reference vs optimized-single-engine comparison.
+- Acceptance criteria:
+  - `run_batch_decon` remains single implementation (no mode split).
+  - `tests/test_decon.py` includes strict reference-equivalence checks and passes.
+  - `scripts/benchmark_decon_legacy_equiv.py` generates JSON with consistency + speedup.

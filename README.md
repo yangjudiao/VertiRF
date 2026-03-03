@@ -11,7 +11,7 @@ VertiRF 是一个独立开源工具包，面向垂向接收函数（VRF）流程
 ## Features | 功能特性
 
 - Three methods in one interface:
-  - `decon`: time-iteration deconvolution (single fast engine)
+  - `decon`: prompt22-compatible time-iteration deconvolution (single fast engine, legacy-equivalent)
   - `corr`: cross-correlation retrieval (single fast engine) with configurable smoothing and post-filter
   - `stack`: peak-window aligned stacking with configurable peak window
 - Zero-phase filter options:
@@ -88,6 +88,20 @@ python scripts/method_parallel_benchmark.py \
   --out method_parallel_benchmark_summary.json \
   --traces 96 --samples 1024 --repeat 2 --jobs 4
 ```
+
+### Decon Legacy-Equivalence Benchmark
+
+```bash
+python scripts/benchmark_decon_legacy_equiv.py \
+  --out benchmark_decon_legacy_equiv_medium.json \
+  --traces 120 --samples 2001 --repeat 1 --jobs 1 --itmax 1200 --tshift-sec 10.0
+```
+
+This benchmark compares:
+- `legacy_reference`: direct prompt22-compatible reconstruction loop
+- `optimized_single_engine`: current decon implementation
+
+and reports both numerical equivalence (`mae/max_abs/flatten_corrcoef`) and speedup.
 
 ### Native Backend Status (C/C++)
 

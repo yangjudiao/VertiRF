@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vertirf.filters.zero_phase import FilterSpec, apply_zero_phase_filter
+from vertirf.filters.zero_phase import FilterSpec, build_zero_phase_response
 
 
 @dataclass(frozen=True)
@@ -31,10 +31,13 @@ class DeconResult:
 class _PreparedState:
     nt: int
     dt: float
-    src_filt: np.ndarray
-    denom: float
-    corr_fft_kernel: np.ndarray
-    nfft_conv: int
+    nfft: int
+    decon_filter_full: np.ndarray
+    source_fft: np.ndarray
+    source_filt_fft: np.ndarray
+    source_filt_energy: float
+    pred_kernel: np.ndarray
+    maxlag: int
 
 
 def next_pow_2(n: int) -> int:
@@ -51,59 +54,85 @@ def normalize_max_abs(x: np.ndarray) -> tuple[np.ndarray, float]:
     return arr / amp, amp
 
 
-def _phase_shift_roll(x: np.ndarray, dt: float, tshift_sec: float) -> np.ndarray:
-    shift = int(round(float(tshift_sec) / float(dt)))
-    return np.roll(np.asarray(x, dtype=np.float64), shift)
+def _phase_shift_prompt22(x: np.ndarray, nfft: int, dt: float, tshift_sec: float) -> np.ndarray:
+    xf = np.fft.fft(np.asarray(x, dtype=np.float64), nfft)
+    shift_i = int(float(tshift_sec) / float(dt))
+    phase = 2.0 * np.pi * np.arange(1, nfft + 1, dtype=np.float64) * shift_i / float(nfft)
+    xf = xf * (np.cos(phase) - 1j * np.sin(phase))
+    y = np.fft.ifft(xf, nfft) / np.cos(2.0 * np.pi * shift_i / float(nfft))
+    return y.real
 
 
-def _correlate_same_fft(a: np.ndarray, corr_fft_kernel: np.ndarray, nfft_conv: int) -> np.ndarray:
-    n = int(a.size)
-    full = np.fft.irfft(np.fft.rfft(a, nfft_conv) * corr_fft_kernel, nfft_conv).real[: (2 * n - 1)]
-    start = (n - 1) // 2
-    return full[start : start + n]
+def _build_decon_filter_full_fft(nfft: int, dt: float, spec: FilterSpec) -> np.ndarray:
+    amp = build_zero_phase_response(nfft=nfft, dt=float(dt), spec=spec)
+    half = int(0.5 * nfft + 1)
+    out = np.zeros((nfft,), dtype=np.float64)
+    out[:half] = amp / float(dt)
+    if nfft > 2:
+        out[half:] = np.flip(out[1 : half - 1])
+    return out
 
 
-def _accumulate_shifted_same_inplace(dst: np.ndarray, src: np.ndarray, shift: int, scale: float) -> None:
+def _gfilter(x: np.ndarray, nfft: int, filt: np.ndarray, dt: float) -> np.ndarray:
+    xf = np.fft.fft(np.asarray(x, dtype=np.float64), nfft)
+    xf = xf * np.asarray(filt, dtype=np.complex128) * float(dt)
+    return np.fft.ifft(xf, nfft).real
+
+
+def _correl_with_prepared_fft(r: np.ndarray, source_filt_fft: np.ndarray, nfft: int) -> np.ndarray:
+    return np.fft.ifft(np.fft.fft(r, nfft) * np.conj(source_filt_fft), nfft).real
+
+
+def _accumulate_shifted_circular_inplace(dst: np.ndarray, src: np.ndarray, shift: int, scale: float) -> None:
     n = int(dst.size)
-    s = int(shift)
-    if s >= 0:
-        n_tail = n - s
-        if n_tail > 0:
-            dst[s:] += float(scale) * src[:n_tail]
+    s = int(shift) % n
+    if s == 0:
+        dst += float(scale) * src
         return
 
-    n_head = n + s
-    if n_head > 0:
-        dst[:n_head] += float(scale) * src[-s:]
+    n_tail = n - s
+    if n_tail > 0:
+        dst[s:] += float(scale) * src[:n_tail]
+    if s > 0:
+        dst[:s] += float(scale) * src[n_tail:]
 
 
-def _pick_window_index(corr_same: np.ndarray, allow_negative_impulse: bool) -> int:
-    n = int(corr_same.size)
-    center = n // 2
-    if allow_negative_impulse:
-        return int(np.argmax(np.abs(corr_same)))
-    return int(center + np.argmax(np.abs(corr_same[center:])))
+def _pick_window_index(corr: np.ndarray, allow_negative_impulse: bool, maxlag: int) -> int:
+    if bool(allow_negative_impulse):
+        return int(np.argmax(np.abs(corr)))
+    hi = max(1, int(maxlag) - 1)
+    return int(np.argmax(np.abs(corr[:hi])))
 
 
 def _prepare_state(source: np.ndarray, cfg: DeconConfig) -> _PreparedState:
     src = np.asarray(source, dtype=np.float64)
     nt = int(src.size)
-    src_filt = apply_zero_phase_filter(src, cfg.dt, cfg.filter_spec)
-    src_filt, _ = normalize_max_abs(src_filt)
+    nfft = next_pow_2(nt)
 
-    denom = float(np.sum(src_filt * src_filt)) + 1e-12
-    nfft_conv = next_pow_2(2 * nt - 1)
+    src0 = np.zeros((nfft,), dtype=np.float64)
+    src0[:nt] = src
 
-    corr_kernel = np.flip(src_filt)
-    corr_fft_kernel = np.fft.rfft(corr_kernel, nfft_conv)
+    decon_f = _build_decon_filter_full_fft(nfft=nfft, dt=float(cfg.dt), spec=cfg.filter_spec)
+    src_filt = _gfilter(src0, nfft, decon_f, cfg.dt)
+    src_filt_fft = np.fft.fft(src_filt, nfft)
+    src_filt_energy = float(np.sum(src_filt**2))
+
+    src_fft = np.fft.fft(src0, nfft)
+    unit_impulse = np.zeros((nfft,), dtype=np.float64)
+    unit_impulse[0] = 1.0
+    pred_kernel = _gfilter(unit_impulse, nfft, decon_f, cfg.dt)
+    pred_kernel = _gfilter(pred_kernel, nfft, src_fft, cfg.dt)
 
     return _PreparedState(
         nt=nt,
         dt=float(cfg.dt),
-        src_filt=src_filt,
-        denom=denom,
-        corr_fft_kernel=corr_fft_kernel,
-        nfft_conv=nfft_conv,
+        nfft=nfft,
+        decon_filter_full=decon_f,
+        source_fft=src_fft,
+        source_filt_fft=src_filt_fft,
+        source_filt_energy=src_filt_energy,
+        pred_kernel=pred_kernel,
+        maxlag=int(0.5 * nfft),
     )
 
 
@@ -112,28 +141,38 @@ def _decon_core_fast(observed: np.ndarray, prepared: _PreparedState, cfg: DeconC
     if u.size != prepared.nt:
         raise ValueError("observed length must match source length")
 
-    obs = apply_zero_phase_filter(u, cfg.dt, cfg.filter_spec)
-    residual = obs.copy()
-    impulse = np.zeros(prepared.nt, dtype=np.float64)
-    power_obs = float(np.sum(obs * obs)) + 1e-12
-    rms = np.zeros(max(1, int(cfg.itmax)), dtype=np.float64)
+    if prepared.source_filt_energy <= 0.0 or (not math.isfinite(prepared.source_filt_energy)):
+        raise RuntimeError("invalid source power in decon")
 
-    center = (prepared.nt - 1) // 2
+    u0 = np.zeros((prepared.nfft,), dtype=np.float64)
+    u0[: prepared.nt] = u
+    u_flt = _gfilter(u0, prepared.nfft, prepared.decon_filter_full, prepared.dt)
+
+    residual = u_flt.copy()
+    impulse = np.zeros((prepared.nfft,), dtype=np.float64)
+    power_u = float(np.sum(u_flt**2))
+    if power_u <= 0.0:
+        raise RuntimeError("invalid source power in decon")
+
+    rms = np.zeros(max(1, int(cfg.itmax)), dtype=np.float64)
     prev_sumsq = 1.0
-    d_error = 100.0 * power_obs + float(cfg.minderr)
+    d_error = 100.0 * power_u + float(cfg.minderr)
     it = 0
 
     while abs(d_error) > float(cfg.minderr) and it < int(cfg.itmax):
-        corr_same = _correlate_same_fft(residual, prepared.corr_fft_kernel, prepared.nfft_conv)
-        idx = _pick_window_index(corr_same, allow_negative_impulse=bool(cfg.allow_negative_impulse))
+        rw = _correl_with_prepared_fft(residual, prepared.source_filt_fft, prepared.nfft)
+        rw = rw / prepared.source_filt_energy
+        idx = _pick_window_index(
+            rw,
+            allow_negative_impulse=bool(cfg.allow_negative_impulse),
+            maxlag=int(prepared.maxlag),
+        )
 
-        amp = corr_same[idx] / prepared.denom
+        amp = float(rw[idx] / prepared.dt)
         impulse[idx] += amp
+        _accumulate_shifted_circular_inplace(residual, prepared.pred_kernel, shift=int(idx), scale=-amp)
 
-        shift = int(idx) - int(center)
-        _accumulate_shifted_same_inplace(residual, prepared.src_filt, shift=shift, scale=-float(amp))
-
-        sumsq = float(np.sum(residual * residual) / power_obs)
+        sumsq = float(np.sum(residual * residual) / power_u)
         if not math.isfinite(sumsq):
             break
 
@@ -142,9 +181,16 @@ def _decon_core_fast(observed: np.ndarray, prepared: _PreparedState, cfg: DeconC
         prev_sumsq = sumsq
         it += 1
 
-    rf = _phase_shift_roll(impulse, dt=cfg.dt, tshift_sec=cfg.tshift_sec)
+    rf = _gfilter(impulse, prepared.nfft, prepared.decon_filter_full, prepared.dt)
+    rf = _phase_shift_prompt22(rf, prepared.nfft, prepared.dt, cfg.tshift_sec)
+    rf = rf[: prepared.nt]
     rf, amp = normalize_max_abs(rf)
-    return DeconResult(rf=rf, rms_history=rms[: max(0, it)], iterations=it, success=bool(amp > 0.0 and math.isfinite(amp)))
+    return DeconResult(
+        rf=rf,
+        rms_history=rms[: max(0, it - 1)],
+        iterations=it,
+        success=bool(amp > 0.0 and math.isfinite(amp)),
+    )
 
 
 def run_batch_decon(
@@ -174,18 +220,26 @@ def run_batch_decon(
     n_jobs = max(1, int(jobs))
     if n_jobs == 1:
         for i in range(n_traces):
-            idx, res = _job(i)
-            out[idx] = res.rf
-            ok[idx] = res.success
-            iters[idx] = int(res.iterations)
+            try:
+                idx, res = _job(i)
+                out[idx] = res.rf
+                ok[idx] = res.success
+                iters[idx] = int(res.iterations)
+            except Exception:
+                ok[i] = False
+                iters[i] = 0
         return out, ok, iters
 
     with ThreadPoolExecutor(max_workers=n_jobs) as ex:
         futures = [ex.submit(_job, i) for i in range(n_traces)]
-        for fut in futures:
-            idx, res = fut.result()
-            out[idx] = res.rf
-            ok[idx] = res.success
-            iters[idx] = int(res.iterations)
+        for i, fut in enumerate(futures):
+            try:
+                idx, res = fut.result()
+                out[idx] = res.rf
+                ok[idx] = res.success
+                iters[idx] = int(res.iterations)
+            except Exception:
+                ok[i] = False
+                iters[i] = 0
 
     return out, ok, iters

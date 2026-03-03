@@ -1,0 +1,39 @@
+{
+  "benchmark": {
+    "traces": 120,
+    "samples": 2001,
+    "dt": 0.05,
+    "itmax": 1200,
+    "minderr": 0.001,
+    "repeat": 1,
+    "jobs": 1,
+    "seed": 7,
+    "allow_negative_impulse": false,
+    "tshift_sec": 10.0
+  },
+  "legacy_reference": {
+    "elapsed_sec": [
+      8.752944600011688
+    ],
+    "elapsed_sec_mean": 8.752944600011688,
+    "success_count": 120,
+    "mean_iterations": 708.1416666666667
+  },
+  "optimized_single_engine": {
+    "elapsed_sec": [
+      2.931357800029218
+    ],
+    "elapsed_sec_mean": 2.931357800029218,
+    "success_count": 120,
+    "mean_iterations": 708.1416666666667
+  },
+  "consistency": {
+    "mae": 3.7799845185446724e-17,
+    "max_abs": 1.4432899320127035e-15,
+    "rmse": 6.220164998718302e-17,
+    "flatten_corrcoef": 0.9999999999999999,
+    "iteration_equal_count": 120,
+    "trace_count": 120
+  },
+  "speedup_vs_legacy": 2.985969368844855
+}

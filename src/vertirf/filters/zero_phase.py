@@ -5,6 +5,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
+try:
+    from scipy.signal import iirfilter, sosfreqz
+
+    _HAS_SCIPY_SIGNAL = True
+except Exception:  # pragma: no cover - optional dependency
+    _HAS_SCIPY_SIGNAL = False
+
 
 @dataclass(frozen=True)
 class FilterSpec:
@@ -31,9 +38,34 @@ def _gaussian_response(freq_hz: np.ndarray, gauss_f0: float) -> np.ndarray:
     return np.exp(-0.25 * (w / f0) ** 2)
 
 
-def _butterworth_bandpass_response(freq_hz: np.ndarray, low_hz: float, high_hz: float, corners: int) -> np.ndarray:
+def _butterworth_bandpass_response(
+    freq_hz: np.ndarray,
+    low_hz: float,
+    high_hz: float,
+    corners: int,
+    sample_rate_hz: float | None = None,
+) -> np.ndarray:
     n = max(1, int(corners))
     f = np.asarray(freq_hz, dtype=np.float64)
+
+    # Prefer scipy's digital-IIR response when available to keep compatibility
+    # with prompt22-style bandpass response construction.
+    if bool(_HAS_SCIPY_SIGNAL) and sample_rate_hz is not None:
+        sr = float(sample_rate_hz)
+        nyq = 0.5 * sr
+        if low_hz > 0.0 and high_hz > low_hz and high_hz < nyq:
+            sos = iirfilter(
+                n,
+                [float(low_hz) / nyq, float(high_hz) / nyq],
+                btype="bandpass",
+                ftype="butter",
+                output="sos",
+            )
+            _, h = sosfreqz(sos, worN=f, fs=sr)
+            resp = np.abs(h) ** 2
+            resp[f <= 0.0] = 0.0
+            return np.clip(resp, 0.0, 1.0)
+
     lo = np.zeros_like(f)
     hi = np.zeros_like(f)
     mask = f > 0.0
@@ -108,7 +140,13 @@ def build_zero_phase_response(nfft: int, dt: float, spec: FilterSpec) -> np.ndar
     if ftype == "gaussian":
         amp = _gaussian_response(freq, gauss_f0=spec.gauss_f0)
     elif ftype == "butterworth_bandpass":
-        amp = _butterworth_bandpass_response(freq, low_hz=low_hz, high_hz=high_hz, corners=spec.corners)
+        amp = _butterworth_bandpass_response(
+            freq,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            corners=spec.corners,
+            sample_rate_hz=1.0 / float(dt),
+        )
     elif ftype == "raised_cosine_bandpass":
         amp = _raised_cosine_bandpass_response(
             freq,
